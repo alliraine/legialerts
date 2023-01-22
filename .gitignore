@@ -1,0 +1,4 @@
+/cache/*.csv
+.env
+legialerts.json
+.idea
