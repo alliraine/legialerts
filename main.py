@@ -145,8 +145,8 @@ def main():
                     t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
                     send_tweet(t, twitter)
 
-                r_b = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
-                gsheet.at[index, 'Number'] = r_b
+                hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
+                gsheet.at[index, 'Number'] = hyperlink
                 gsheet.at[index, 'Status'] = lscan.iloc[0]["last_action"]
                 if lscan.iloc[0]["last_action_date"] != None and lscan.iloc[0]["last_action_date"] != '':
                     gsheet.at[index, 'Date'] = lscan.iloc[0]["last_action_date"]
