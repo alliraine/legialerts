@@ -163,7 +163,7 @@ def main():
                     gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
 
                 #if not new check change hash to see if the bill has changed. If it has trigger an alert
-                elif lscan.iloc[0]["change_hash"] != row["Change Hash"]:
+                elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                     print("Bill Change Found")
                     t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
                     send_tweet(t, twitter)
