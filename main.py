@@ -79,11 +79,11 @@ def send_tweet(text, twitter):
         for l in lines:
             if t_id is not None:
                 print(l)
-                #r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
+                r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
             else:
                 print(l)
-                #r = twitter.create_tweet(text=l)
-            #t_id = r.data.get("id")
+                r = twitter.create_tweet(text=l)
+            t_id = r.data.get("id")
     except:
         print("error sending tweet")
 
