@@ -13,8 +13,10 @@ from risk import RISK
 
 from dotenv import load_dotenv
 
+load_dotenv()
+
 #ordered list based on legiscan state id
-STATES = ["Alaska", "Alabama", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida",
+STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida",
           "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
           "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana",
           "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina",
@@ -25,16 +27,17 @@ STATES = ["Alaska", "Alabama", "Arizona", "Arkansas", "California", "Colorado", 
 all_lists = {}
 curr_path = os.path.dirname(__file__)
 
-load_dotenv()
+legi_key = os.environ.get('legiscan_key')
+Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
+Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
 def get_main_lists():
-    legi_key = os.environ.get('legiscan_key')
-    Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
     for idx, s in enumerate(SESSIONS):
 
         # set helpful vars
         s_id = s.get("session_id")
         s_name = STATES[idx]
+        print(s_id,s_name)
         s_file = f"{curr_path}/cache/" + s_name + ".csv"
 
         # checks cache if stale or doesn't exist pull (we can pull new data every hour)
@@ -74,14 +77,13 @@ def send_tweet(text, twitter):
     try:
         t_id = None
         for l in lines:
-            print(l)
             if t_id is not None:
                 print(l)
-                r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
+                #r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
             else:
                 print(l)
-                r = twitter.create_tweet(text=l)
-            t_id = r.data.get("id")
+                #r = twitter.create_tweet(text=l)
+            #t_id = r.data.get("id")
     except:
         print("error sending tweet")
 
@@ -96,7 +98,21 @@ def setup_tweets(i, lines):
             lines = setup_tweets(i + 1, lines)
     return lines
 
+def get_sponsors(list):
+    sponsors = ""
+    for s in list:
+        if sponsors != "":
+            sponsors = sponsors + ", "
+        sponsors = sponsors + s["name"]
+    return sponsors
 
+def get_calendar(list):
+    calendar = ""
+    for event in list:
+        if calendar != "":
+            calendar = calendar + ", "
+        calendar = calendar + event["type"] + " " + event["date"] + " " + event["time"] + " " + event["location"]
+    return calendar
 def main():
     print("starting...")
     get_main_lists()
@@ -132,6 +148,7 @@ def main():
                 r_la = lscan.iloc[0]["last_action"]
                 r_title = lscan.iloc[0]["title"]
                 r_link = lscan.iloc[0]["url"]
+                bill_id = lscan.iloc[0]["bill_id"]
                 prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
 
                 #checks if the bill is recently added. If not then alert new bill
@@ -139,11 +156,23 @@ def main():
                     print("New Bill Found")
                     t = f"🚨ALERT NEW BILL 🚨\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
                     send_tweet(t, twitter)
+                    r = requests.get(Bill_URL + str(bill_id))
+                    content = r.json()["bill"]
+
+                    gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
+                    gsheet.at[index, 'Calander'] = get_calendar(content["calendar"])
+
                 #if not new check change hash to see if the bill has changed. If it has trigger an alert
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"]:
                     print("Bill Change Found")
                     t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
                     send_tweet(t, twitter)
+
+                    r = requests.get(Bill_URL + str(bill_id))
+                    content = r.json()["bill"]
+
+                    gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
+                    gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
 
                 hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
                 gsheet.at[index, 'Number'] = hyperlink
@@ -155,6 +184,8 @@ def main():
                 gsheet.at[index, 'Summary'] = lscan.iloc[0]["title"]
                 gsheet.at[index, 'Change Hash'] = lscan.iloc[0]["change_hash"]
                 gsheet.at[index, 'URL'] = f"=HYPERLINK(\"{r_link}\",\"{r_link}\")"
+
+
             else:
                 gsheet.at[index, 'Date'] = "Unknown"
             gsheet.at[index, 'Erin Reed\'s State Risk'] = RISK[r_state]
