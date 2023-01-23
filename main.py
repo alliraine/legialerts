@@ -160,7 +160,7 @@ def main():
                     content = r.json()["bill"]
 
                     gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
-                    gsheet.at[index, 'Calander'] = get_calendar(content["calendar"])
+                    gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
 
                 #if not new check change hash to see if the bill has changed. If it has trigger an alert
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"]:
