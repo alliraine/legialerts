@@ -142,6 +142,7 @@ def main():
     for index, row in gsheet.iterrows():
         r_state = row["State"].strip()
         r_bnum = row["Number"]
+        r_btype = row["Bill Type"]
         if not all_lists[r_state].empty:
             lscan = all_lists[r_state].loc[all_lists[r_state]["number"] == r_bnum.strip()]
             if not lscan.empty:
@@ -154,7 +155,7 @@ def main():
                 #checks if the bill is recently added. If not then alert new bill
                 if prev.empty or gsheet.at[index, 'Change Hash'] == "":
                     print("New Bill Found")
-                    t = f"🚨ALERT NEW BILL 🚨\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
+                    t = f"🚨ALERT NEW BILL 🚨\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
                     send_tweet(t, twitter)
                     r = requests.get(Bill_URL + str(bill_id))
                     content = r.json()["bill"]
@@ -165,7 +166,7 @@ def main():
                 #if not new check change hash to see if the bill has changed. If it has trigger an alert
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                     print("Bill Change Found")
-                    t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title} \n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
+                    t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
                     send_tweet(t, twitter)
 
                     r = requests.get(Bill_URL + str(bill_id))
