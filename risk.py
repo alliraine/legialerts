@@ -15,7 +15,7 @@ RISK = {
     "Ohio": "High",
     "South Carolina": "High",
     "South Dakota": "High",
-    "Utah": "High",
+    "Utah": "Worst",
     "Virginia": "High",
     "West Virginia": "High",
     "Alaska": "Moderate",
