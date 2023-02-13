@@ -114,6 +114,14 @@ def get_calendar(list):
         calendar = calendar + event["type"] + " " + event["date"] + " " + event["time"] + " " + event["location"]
     return calendar
 
+def get_history(list):
+    history = ""
+    for event in list:
+        if history != "":
+            history = history + ", "
+        history = history + event["chamber"] + " " + event["date"] + " " + event["action"]
+    return history
+
 def bad_bills():
     print("starting bad bills..")
     get_main_lists()
@@ -163,6 +171,8 @@ def bad_bills():
 
                     gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
                     gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
+                    gsheet.at[index, 'History'] = get_history(content["history"])
+
 
                 #if not new check change hash to see if the bill has changed. If it has trigger an alert
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
@@ -175,6 +185,7 @@ def bad_bills():
 
                     gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
                     gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
+                    gsheet.at[index, 'History'] = get_history(content["history"])
 
                 hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
                 gsheet.at[index, 'Number'] = hyperlink
