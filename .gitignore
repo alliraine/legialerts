@@ -3,3 +3,5 @@
 legialerts.json
 .idea
 /discord/cogs/cache/*.json
+__pycache__/*
+__pycache__/
