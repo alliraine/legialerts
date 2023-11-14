@@ -1,5 +1,4 @@
 import os.path
-from textwrap import wrap
 
 import requests
 import gspread
