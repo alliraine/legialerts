@@ -1,4 +1,8 @@
 import os.path
+import sys
+
+import logging
+
 from textwrap import wrap
 
 import requests
@@ -14,7 +18,6 @@ from utils.twitter_helper import send_tweet
 from utils.legiscan_helper import get_calendar, get_sponsors, get_history
 
 from dotenv import load_dotenv
-
 load_dotenv()
 
 #ordered list based on legiscan state id
@@ -30,6 +33,10 @@ all_lists = {}
 curr_path = os.path.dirname(__file__)
 
 legi_key = os.environ.get('legiscan_key')
+if legi_key is None:
+    logging.error("Must have a LegiAlerts key in path or else this thing won't work.  Shocking!")
+    sys.exit()
+
 Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
