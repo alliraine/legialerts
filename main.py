@@ -1,5 +1,5 @@
+import json
 import os.path
-
 import requests
 import gspread
 
@@ -7,7 +7,7 @@ import pandas as pd
 import tweepy
 import time
 
-from utils.sessions import SESSIONS
+from utils.get_sessions import get_sessions_dataframe
 from utils.risk import RISK
 from utils.twitter_helper import send_tweet
 from utils.legiscan_helper import get_calendar, get_sponsors, get_history
@@ -25,21 +25,35 @@ STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", 
           "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
           "Wisconsin", "Wyoming", "DC", "US"]
 
-all_lists = {}
 curr_path = os.path.dirname(__file__)
 
 legi_key = os.environ.get('legiscan_key')
 Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
-def get_main_lists():
-    for idx, s in enumerate(SESSIONS):
+years = [2023, 2024]
 
+def get_main_lists(year):
+    session_list_file = f"{curr_path}/cache/sessions.csv"
+
+    all_lists = {}
+
+    # pull new session list every 24 hours
+    if (not os.path.exists(session_list_file)) or (os.path.getmtime(session_list_file)) <= time.time() - 1 * 60 * 60 * 24:
+        df = get_sessions_dataframe()
+    else:
+        print("Loading sessions_list from Cache")
+        df = pd.read_csv(session_list_file)
+
+    SESSIONS = df.loc[((df['year_start'] == year) | (df['year_end'] == year)) & (df['special'] == 0)]
+
+    for idx, s in SESSIONS.iterrows():
         # set helpful vars
         s_id = s.get("session_id")
-        s_name = STATES[idx]
-        print(s_id,s_name)
-        s_file = f"{curr_path}/cache/" + s_name + ".csv"
+        state_id = s.get("state_id")
+        s_name = STATES[state_id - 1]
+        s_year = str(s.get("year_start"))
+        s_file = f"{curr_path}/cache/" + s_name + "-" + s_year + ".csv"
 
         # checks cache if stale or doesn't exist pull (we can pull new data every hour)
         if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 1 * 60 * 60:
@@ -59,9 +73,11 @@ def get_main_lists():
             print("Loading from Cache")
             all_lists[s_name] = pd.read_csv(s_file)
 
-def bad_bills():
+    return all_lists
+
+def bad_bills(year):
     print("starting bad bills..")
-    get_main_lists()
+    all_lists = get_main_lists(year)
     twitter = tweepy.Client(
         consumer_key=os.environ.get('twitter_consumer_key'),
         consumer_secret=os.environ.get('twitter_consumer_secret'),
@@ -73,15 +89,15 @@ def bad_bills():
     gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
 
     #open worksheet
-    wks = gc.open_by_key(os.environ.get('gsheet_key')).sheet1
+    wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).sheet1
     expected_headers = wks.row_values(1)
 
     #loads worksheet into dataframe
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
 
     #gets previous sheet from file
-    if os.path.exists(f"{curr_path}/cache/gsheet.csv"):
-        prev_gsheet = pd.read_csv(f"{curr_path}/cache/gsheet.csv")
+    if os.path.exists(f"{curr_path}/cache/gsheet-{year}.csv"):
+        prev_gsheet = pd.read_csv(f"{curr_path}/cache/gsheet-{year}.csv")
     else:
         prev_gsheet = gsheet
 
@@ -155,11 +171,11 @@ def bad_bills():
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
-    gsheet.to_csv(f"{curr_path}/cache/gsheet.csv")
+    gsheet.to_csv(f"{curr_path}/cache/gsheet-{year}.csv")
 
-def good_bills():
+def good_bills(year):
     print("starting good bills...")
-    get_main_lists()
+    all_lists = get_main_lists(year)
     twitter = tweepy.Client(
         consumer_key=os.environ.get('twitter_consumer_key'),
         consumer_secret=os.environ.get('twitter_consumer_secret'),
@@ -171,15 +187,15 @@ def good_bills():
     gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
 
     #open worksheet
-    wks = gc.open_by_key(os.environ.get('gsheet_key')).worksheet("Pro-LGBTQ Bills")
+    wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).worksheet("Pro-LGBTQ Bills")
     expected_headers = wks.row_values(1)
 
     #loads worksheet into dataframe
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
 
     #gets previous sheet from file
-    if os.path.exists(f"{curr_path}/cache/gsheet_good.csv"):
-        prev_gsheet = pd.read_csv(f"{curr_path}/cache/gsheet_good.csv")
+    if os.path.exists(f"{curr_path}/cache/gsheet_good-{year}.csv"):
+        prev_gsheet = pd.read_csv(f"{curr_path}/cache/gsheet_good-{year}.csv")
     else:
         prev_gsheet = gsheet
 
@@ -250,11 +266,12 @@ def good_bills():
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
-    gsheet.to_csv(f"{curr_path}/cache/gsheet_good.csv")
+    gsheet.to_csv(f"{curr_path}/cache/gsheet_good-{year}.csv")
 
 def main():
-    bad_bills()
-    good_bills()
+    for year in years:
+        bad_bills(year)
+        good_bills(year)
 
 if __name__ == "__main__":
     main()
