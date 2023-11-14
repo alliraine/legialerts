@@ -1,6 +1,5 @@
 pandas
 requests
-tweepy
 gspread
 google-api-python-client
 google-auth-httplib2

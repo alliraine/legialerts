@@ -10,7 +10,6 @@ import time
 
 from utils.sessions import SESSIONS
 from utils.risk import RISK
-from utils.twitter_helper import send_tweet
 from utils.legiscan_helper import get_calendar, get_sponsors, get_history
 
 from dotenv import load_dotenv
@@ -103,7 +102,6 @@ def bad_bills():
                 if prev.empty or gsheet.at[index, 'Change Hash'] == "":
                     print("New Bill Found")
                     t = f"🚨ALERT NEW BILL 🚨\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
-                    send_tweet(t, twitter)
                     r = requests.get(Bill_URL + str(bill_id))
                     content = r.json()["bill"]
 
@@ -116,7 +114,6 @@ def bad_bills():
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                     print("Bill Change Found")
                     t = f"🏛 Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
-                    send_tweet(t, twitter)
 
                     r = requests.get(Bill_URL + str(bill_id))
                     content = r.json()["bill"]
@@ -201,7 +198,6 @@ def good_bills():
                 if prev.empty or gsheet.at[index, 'Change Hash'] == "":
                     print("New Bill Found")
                     t = f"🌈NEW GOOD BILL 🏳️‍⚧️\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
-                    send_tweet(t, twitter)
                     r = requests.get(Bill_URL + str(bill_id))
                     content = r.json()["bill"]
 
@@ -212,7 +208,6 @@ def good_bills():
                 elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                     print("Bill Change Found")
                     t = f"🌈Status Change 🏛\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Erin Reed's State Risk: {RISK[r_state]} \n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
-                    send_tweet(t, twitter)
 
                     r = requests.get(Bill_URL + str(bill_id))
                     content = r.json()["bill"]
