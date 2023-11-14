@@ -1,3 +1,5 @@
+from textwrap import wrap
+
 def send_tweet(text, twitter):
     # lets start by splitting by new line
     lines = text.splitlines()
