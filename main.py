@@ -5,7 +5,6 @@ import requests
 import gspread
 
 import pandas as pd
-import tweepy
 import time
 
 from utils.sessions import SESSIONS
@@ -62,12 +61,6 @@ def get_main_lists():
 def bad_bills():
     print("starting bad bills..")
     get_main_lists()
-    twitter = tweepy.Client(
-        consumer_key=os.environ.get('twitter_consumer_key'),
-        consumer_secret=os.environ.get('twitter_consumer_secret'),
-        access_token=os.environ.get('twitter_access_token'),
-        access_token_secret=os.environ.get('twitter_access_token_secret')
-    )
 
     #open google sheets api account
     gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
@@ -158,12 +151,6 @@ def bad_bills():
 def good_bills():
     print("starting good bills...")
     get_main_lists()
-    twitter = tweepy.Client(
-        consumer_key=os.environ.get('twitter_consumer_key'),
-        consumer_secret=os.environ.get('twitter_consumer_secret'),
-        access_token=os.environ.get('twitter_access_token'),
-        access_token_secret=os.environ.get('twitter_access_token_secret')
-    )
 
     #open google sheets api account
     gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
