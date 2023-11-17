@@ -53,25 +53,30 @@ def get_main_lists(year):
         state_id = s.get("state_id")
         s_name = STATES[state_id - 1]
         s_year = str(s.get("year_start"))
-        s_file = f"{curr_path}/cache/" + s_name + "-" + s_year + ".csv"
+        s_files = [f"{curr_path}/cache/" + s_name + "-" + s_year + ".csv"]
 
-        # checks cache if stale or doesn't exist pull (we can pull new data every hour)
-        if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 1 * 60 * 60:
-            print("Cache doesn't exist or is stale. Pulling from Legiscan")
-            # Pull session master list from Legiscan
-            r = requests.get(Master_List_URL + str(s_id))
-            content = r.json()["masterlist"]
-            temp_list = []
-            for attribute, value in content.items():
-                if attribute != "session":
-                    temp_list.append(value)
-            all_lists[s_name] = pd.DataFrame(temp_list)
+        # if this session extends more than one year we want to make sure we use it for both years
+        if s.get("year_start") != s.get("year_end"):
+            s_files.append(f"{curr_path}/cache/" + s_name + "-" + str(s.get("year_end")) + ".csv")
 
-            # save to csv
-            all_lists[s_name].to_csv(s_file)
-        else:
-            print("Loading from Cache")
-            all_lists[s_name] = pd.read_csv(s_file)
+        for s_file in s_files:
+            # checks cache if stale or doesn't exist pull (we can pull new data every hour)
+            if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 1 * 60 * 60:
+                print("Cache doesn't exist or is stale. Pulling from Legiscan")
+                # Pull session master list from Legiscan
+                r = requests.get(Master_List_URL + str(s_id))
+                content = r.json()["masterlist"]
+                temp_list = []
+                for attribute, value in content.items():
+                    if attribute != "session":
+                        temp_list.append(value)
+                all_lists[s_name] = pd.DataFrame(temp_list)
+
+                # save to csv
+                all_lists[s_name].to_csv(s_file)
+            else:
+                print("Loading from Cache")
+                all_lists[s_name] = pd.read_csv(s_file)
 
     return all_lists
 
