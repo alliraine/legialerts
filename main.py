@@ -70,7 +70,6 @@ def get_main_lists(year):
                 print("Cache doesn't exist or is stale. Pulling from Legiscan")
                 # Pull session master list from Legiscan
                 r = requests.get(Master_List_URL + str(s_id))
-                print(Master_List_URL + str(s_id))
                 content = r.json()["masterlist"]
                 temp_list = []
                 for attribute, value in content.items():
