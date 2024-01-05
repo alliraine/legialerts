@@ -29,8 +29,7 @@ us_state_to_abbrev = {
     "Iowa": "IA",
     "Kansas": "KS",
     "Kentucky": "KY",
-    "Louisiana": "L"
-                 "A",
+    "Louisiana": "LA",
     "Maine": "ME",
     "Maryland": "MD",
     "Massachusetts": "MA",
