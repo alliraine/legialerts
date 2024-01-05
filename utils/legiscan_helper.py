@@ -6,6 +6,14 @@ def get_sponsors(list):
         sponsors = sponsors + s["name"]
     return sponsors
 
+def get_texts(list):
+    texts = ""
+    for t in list:
+        if texts != "":
+            texts = texts + ", "
+        texts = texts + t["state_link"]
+    return texts
+
 def get_calendar(list):
     calendar = ""
     for event in list:
