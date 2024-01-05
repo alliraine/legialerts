@@ -15,18 +15,18 @@ def send_tweet(text, twitter):
     lines = setup_tweets(0, lines)
 
     # send tweets. thread where needed
-    try:
-        t_id = None
-        for l in lines:
-            if t_id is not None:
-                print(l)
-                r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
-            else:
-                print(l)
-                r = twitter.create_tweet(text=l)
-            t_id = r.data.get("id")
-    except:
-        print("error sending tweet")
+    # try:
+    #     t_id = None
+    #     for l in lines:
+    #         if t_id is not None:
+    #             print(l)
+    #             r = twitter.create_tweet(text=l, in_reply_to_tweet_id=t_id)
+    #         else:
+    #             print(l)
+    #             r = twitter.create_tweet(text=l)
+    #         t_id = r.data.get("id")
+    # except:
+    #     print("error sending tweet")
 
 # recursive function for spliting up tweets
 def setup_tweets(i, lines):
