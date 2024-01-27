@@ -23,7 +23,7 @@ YOUTH_RISK = {
     "Iowa": "Worst",
     "Kansas": "Worst",
     "Nebraska": "Worst",
-    "New Hampshire": "Moderate",
+    "New Hampshire": "High",
     "North Carolina": "Worst",
     "North Dakota": "Worst",
     "Wyoming": "Moderate",
@@ -61,16 +61,16 @@ ADULT_RISK = {
     "Tennessee": "Worst",
     "Texas": "High",
     "Idaho": "Moderate",
-    "Indiana": "Moderate",
+    "Indiana": "High",
     "Kentucky": "Moderate",
-    "Louisiana": "Moderate",
+    "Louisiana": "High",
     "Mississippi": "High",
     "Missouri": "High",
     "Montana": "Worst",
-    "Ohio": "Moderate",
+    "Ohio": "High",
     "South Carolina": "High",
     "South Dakota": "Moderate",
-    "Utah": "Moderate",
+    "Utah": "High",
     "Virginia": "Low",
     "West Virginia": "High",
     "Alaska": "Moderate",
@@ -78,7 +78,7 @@ ADULT_RISK = {
     "Iowa": "Moderate",
     "Kansas": "Worst",
     "Nebraska": "High",
-    "New Hampshire": "",
+    "New Hampshire": "Moderate",
     "North Carolina": "Moderate",
     "North Dakota": "Worst",
     "Wyoming": "Moderate",
@@ -105,7 +105,7 @@ ADULT_RISK = {
     "Vermont": "Safest",
     "Washington": "Safest",
     "DC": "Safest",
-    "US": "Low"
+    "US": "Moderate"
 }
 
 COLOR = {

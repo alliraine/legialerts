@@ -19,6 +19,19 @@ legi_key = os.environ.get('legiscan_key')
 u_input = ""
 
 
+class color:
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
+
 def search(term, page, interactive):
     global ignore_list
     Search_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSearch&state=ALL&page={page}&query="
@@ -26,7 +39,8 @@ def search(term, page, interactive):
     content = r.json()["searchresult"]
     for e in content:
         if e != "summary":
-            bill = content[e] #{'relevance': 98, 'state': 'MI', 'bill_number': 'HJRE', 'bill_id': 1771836, 'change_hash': 'de6b4d0f455fe65d8c9f3f44fa911121', 'url': 'https://legiscan.com/MI/bill/HJRE/2023', 'text_url': 'https://legiscan.com/MI/text/HJRE/2023', 'research_url': 'https://legiscan.com/MI/research/HJRE/2023', 'last_action_date': '2023-06-15', 'last_action': 'Printed Joint Resolution Filed 06/14/2023', 'title': "Women: other; women's bill of rights; provide for. Amends the state constitution by adding sec. 29 to art. I."}
+            bill = content[
+                e]  # {'relevance': 98, 'state': 'MI', 'bill_number': 'HJRE', 'bill_id': 1771836, 'change_hash': 'de6b4d0f455fe65d8c9f3f44fa911121', 'url': 'https://legiscan.com/MI/bill/HJRE/2023', 'text_url': 'https://legiscan.com/MI/text/HJRE/2023', 'research_url': 'https://legiscan.com/MI/research/HJRE/2023', 'last_action_date': '2023-06-15', 'last_action': 'Printed Joint Resolution Filed 06/14/2023', 'title': "Women: other; women's bill of rights; provide for. Amends the state constitution by adding sec. 29 to art. I."}
             # lscan = prev_gsheet.loc[(prev_gsheet["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet["Number"] == bill["bill_number"]) & (prev_gsheet["Summary"] == bill["title"])]
             #
             # lscan2 = prev_gsheet2.loc[(prev_gsheet2["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet2["Number"] == bill["bill_number"]) & (prev_gsheet2["Summary"] == bill["title"])]
@@ -37,20 +51,43 @@ def search(term, page, interactive):
             #
             # lscan5 = prev_gsheet5.loc[(prev_gsheet5["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet5["Number"] == bill["bill_number"]) & (prev_gsheet5["Summary"] == bill["title"])]
 
-            lscan = prev_gsheet.loc[(prev_gsheet["Bill ID"] == bill["bill_id"]) | ((prev_gsheet["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet["Number"] == bill["bill_number"]) & (prev_gsheet["Summary"] == bill["title"]))]
+            lscan = prev_gsheet.loc[(prev_gsheet["Bill ID"] == bill["bill_id"]) | (
+                        (prev_gsheet["State"] == abbrev_to_us_state[bill["state"]]) & (
+                            prev_gsheet["Number"] == bill["bill_number"]) & (prev_gsheet["Summary"] == bill["title"]))]
 
-            lscan2 = prev_gsheet2.loc[(prev_gsheet2["Bill ID"] == bill["bill_id"]) | ((prev_gsheet2["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet2["Number"] == bill["bill_number"]) & (prev_gsheet2["Summary"] == bill["title"]))]
+            lscan2 = prev_gsheet2.loc[(prev_gsheet2["Bill ID"] == bill["bill_id"]) | (
+                        (prev_gsheet2["State"] == abbrev_to_us_state[bill["state"]]) & (
+                            prev_gsheet2["Number"] == bill["bill_number"]) & (
+                                    prev_gsheet2["Summary"] == bill["title"]))]
 
-            lscan3 = prev_gsheet3.loc[(prev_gsheet3["Bill ID"] == bill["bill_id"]) | ((prev_gsheet3["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet3["Number"] == bill["bill_number"]) & (prev_gsheet3["Summary"] == bill["title"]))]
+            lscan3 = prev_gsheet3.loc[(prev_gsheet3["Bill ID"] == bill["bill_id"]) | (
+                        (prev_gsheet3["State"] == abbrev_to_us_state[bill["state"]]) & (
+                            prev_gsheet3["Number"] == bill["bill_number"]) & (
+                                    prev_gsheet3["Summary"] == bill["title"]))]
 
-            lscan4 = prev_gsheet4.loc[(prev_gsheet4["Bill ID"] == bill["bill_id"]) | ((prev_gsheet4["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet4["Number"] == bill["bill_number"]) & (prev_gsheet4["Summary"] == bill["title"]))]
+            lscan4 = prev_gsheet4.loc[(prev_gsheet4["Bill ID"] == bill["bill_id"]) | (
+                        (prev_gsheet4["State"] == abbrev_to_us_state[bill["state"]]) & (
+                            prev_gsheet4["Number"] == bill["bill_number"]) & (
+                                    prev_gsheet4["Summary"] == bill["title"]))]
 
-            lscan5 = prev_gsheet5.loc[(prev_gsheet5["Bill ID"] == bill["bill_id"]) | ((prev_gsheet5["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet5["Number"] == bill["bill_number"]) & (prev_gsheet5["Summary"] == bill["title"]))]
+            lscan5 = prev_gsheet5.loc[(prev_gsheet5["Bill ID"] == bill["bill_id"]) | (
+                        (prev_gsheet5["State"] == abbrev_to_us_state[bill["state"]]) & (
+                            prev_gsheet5["Number"] == bill["bill_number"]) & (
+                                    prev_gsheet5["Summary"] == bill["title"]))]
 
             lscan6 = ignore_list.loc[(ignore_list["bill_id"] == bill["bill_id"])]
 
             if lscan.empty and lscan2.empty and lscan3.empty and lscan4.empty and lscan5.empty and lscan6.empty:
-                print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"], bill["title"], bill["text_url"])
+                if bill["last_action_date"] is not None:
+                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 1, 22):
+                        print(color.RED, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                          bill["title"], bill["text_url"], color.END)
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 1, 1):
+                        print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                              bill["title"], bill["text_url"])
+                else:
+                    print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                      bill["title"], bill["text_url"])
                 if interactive:
                     u_input = input('Do you want to add this bill?\n')
                     while u_input.lower() not in ('y', 'n', 's'):
@@ -60,7 +97,8 @@ def search(term, page, interactive):
                     if u_input.lower() == "n":
                         df2 = pd.DataFrame([[bill["bill_id"], bill["state"], bill["bill_number"],
                                              datetime.strptime(bill["last_action_date"], '%Y-%m-%d').strftime(
-                                                 "%-d/%-m/%Y")]], columns=["bill_id", "state", "bill_number", "last_action_date"])
+                                                 "%-d/%-m/%Y")]],
+                                           columns=["bill_id", "state", "bill_number", "last_action_date"])
                         ignore_list = pd.concat([ignore_list, df2], ignore_index=True)
                     if u_input.lower() == "s":
                         ignore_list.to_json("../cache/ignore_list.json")
@@ -101,7 +139,7 @@ expected_headers4 = wks4.row_values(1)
 prev_gsheet4 = pd.DataFrame(wks4.get_all_records(expected_headers=expected_headers4))
 
 # open worksheet
-wks5 = gc.open_by_key(os.environ.get('gsheet_key_2024')).worksheet("2023 Rollover Anti-LGBTQ Bills")
+wks5 = gc.open_by_key(os.environ.get('gsheet_key_2024')).worksheet("Rollover Anti-LGBTQ Bills")
 expected_headers5 = wks5.row_values(1)
 
 # loads worksheet into dataframe
@@ -129,12 +167,21 @@ if u_input == "bill pass":
     search("\"sex reassignment\"", 1, False)
     print("\nCross Sex Bills:\n")
     search("\"cross sex\"", 1, False)
+    print("\nObscene Bills:\n")
+    search("\"obscene\"", 1, False)
+    print("\nGroom Bills:\n")
+    search("\"groom\"", 1, False)
+
+    print("\nGeneral Polyamory terms:\n")
+    search("\"polyamory\"", 1, False)
+    search("\"multiple partners\"", 1, False)
+
     print("\nErin's Search Terms")
     search("\"Biological sex\" or \"puberty\" or \"hormone\" or \"bathroom\" or \"restroom\" or \"gender marker\" or "
            "\"sex marker\" or \"sex designation\" or \"gender affirming\" Or \"drag\" OR \"gender change\" or "
            "\"transgender\"", 1, False)
 
 else:
-    search(u_input, 1, True)
+    search(u_input, 1, False)
 
 ignore_list.to_json("../cache/ignore_list.json")
