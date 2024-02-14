@@ -34,9 +34,15 @@ Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
 years = [2023, 2024]
 
-team_report = ""
-dev_report = ""
 world_report = ""
+dev_report = ""
+team_report = """
+<tr>
+    <th>State</th>
+    <th>Bill</th>
+    <th>New History</th>
+</tr>
+"""
 
 def get_main_lists(year):
     session_list_file = f"{curr_path}/cache/sessions.csv"
@@ -133,7 +139,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
                         t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Adult State Risk: {ADULT_RISK[r_state]} \n🚦Youth State Risk: {YOUTH_RISK[r_state]}\n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
                         send_tweet(t, twitter)
-                        team_report = team_report + "\n" + t
+                        #team_report = team_report + "\n" + t
                         world_report = world_report + "\n" + t
 
                         r = requests.get(Bill_URL + str(bill_id))
@@ -151,13 +157,21 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                         print("Bill Change Found")
                         t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Adult State Risk: {ADULT_RISK[r_state]} \n🚦Youth State Risk: {YOUTH_RISK[r_state]}\n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
                         send_tweet(t, twitter)
-                        team_report = team_report + "\n" + t
+                        #team_report = team_report + "\n" + t
                         world_report = world_report + "\n" + t
                         r = requests.get(Bill_URL + str(bill_id))
                         content = r.json()["bill"]
 
                         gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
                         gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
+                        if gsheet.at[index, 'History'] != get_history(content["history"]):
+                            team_report = team_report + f"""
+                            <tr>
+                                <th>{r_state}</th>
+                                <th>{r_bnum.strip()}</th>
+                                <th>{get_history(content['history']).replace(gsheet.at[index, 'History'], "")}</th>
+                            </tr>
+                            """
                         gsheet.at[index, 'History'] = get_history(content["history"])
                         gsheet.at[index, 'Bill ID'] = str(bill_id)
                         gsheet.at[index, "PDF"] = get_texts(content["texts"])
@@ -205,9 +219,24 @@ def main():
         update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛")
     update_worksheet(2024, "Rollover Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
 
-    notify_dev_team("Bot Run", dev_report)
-    notify_world("Latest Changes", world_report)
-    notify_legi_team("Latest Bot Run", team_report)
+    if dev_report != "":
+        notify_dev_team("Bot Run", dev_report)
+    # notify_world("Latest Changes", world_report)
+    if team_report != """
+<tr>
+    <th>State</th>
+    <th>Bill</th>
+    <th>New History</th>
+</tr>
+""":
+        html = open("email.html", "r")
+        email = html.read()
+        email.replace("{subject}", "New status for bills")
+        email.replace("{preview}", "New History on bills!")
+        email.replace("{text}", "Hey there!, <br> Here is the latest updates as of the last bot run.")
+        email.replace("{table}", team_report)
+        notify_legi_team("New status for bills", email)
+        html.close()
 
 if __name__ == "__main__":
     main()

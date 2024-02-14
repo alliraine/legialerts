@@ -6,19 +6,19 @@ sender = "hello@legialerts.com"
 password = os.environ.get('GOOGLE_TOKEN')
 
 def notify_legi_team(subject, content):
-    to = [{"email": "hello@legialerts.com"}]
+    to = ["hello@legialerts.com", "allichapman22@gmail.com"]
     send_email(to, subject, content)
 
 def notify_dev_team(subject, content):
-    to = [{"email": "hello@legialerts.com"}]
+    to = ["hello@legialerts.com", "allichapman22@gmail.com"]
     send_email(to, subject, content)
 
 def notify_world(subject, content):
-    to = [{"email": "hello@legialerts.com"}]
+    to = ["hello@legialerts.com", "allichapman22@gmail.com"]
     send_email(to, subject, content)
 
 def send_email(to, subject, content):
-    msg = MIMEText(content)
+    msg = MIMEText("html", content)
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = ', '.join(to)
