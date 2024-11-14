@@ -107,7 +107,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
         all_lists = get_main_lists(year-1)
 
     #open google sheets api account
-    gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
+    gc = gspread.service_account_from_dict(json.loads(os.environ.get('gsuite_service_account')))
 
     #open worksheet
     wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).worksheet(worksheet)
