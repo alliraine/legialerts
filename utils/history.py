@@ -55,6 +55,8 @@ def check_history(index, row, df, date):
     if history.find(date) > -1:
         u_status = input(f'{state} {bnum} has new history!\n\n.'
                          f'{history}\n\n'
+                         f'{row["Bill Type"]}\n\n'
+                         f'{row["URL"]}\n\n'
                          f'Current status is: {row["Manual Status"]}.'
                          f'\nPlease input new status or press enter to keep current status.\n')
         if u_status != "":
@@ -78,18 +80,18 @@ wks.format("A2:K400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend"}})
 wks.format("G2:G400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "horizontalAlignment": "CENTER"})
 wks.format("E2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "DATE"}, "horizontalAlignment": "CENTER"})
 
-for index, row in gsheet1.iterrows():
-    old1 = gsheet1
-    gsheet1 = check_history(index, row, gsheet1, u_input)
-    print(f"{row['State'].strip()} {row['Number']} status is: {gsheet1.at[index, 'Manual Status']}")
-
-#updates the entire google sheet from data frame
-wks2.update([gsheet1.columns.values.tolist()] + gsheet1.values.tolist(), value_input_option='USER_ENTERED')
-
-#formats google sheet
-wks2.format("A2:K400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend"}})
-wks2.format("G2:G400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "horizontalAlignment": "CENTER"})
-wks2.format("E2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "DATE"}, "horizontalAlignment": "CENTER"})
+# for index, row in gsheet1.iterrows():
+#     old1 = gsheet1
+#     gsheet1 = check_history(index, row, gsheet1, u_input)
+#     print(f"{row['State'].strip()} {row['Number']} status is: {gsheet1.at[index, 'Manual Status']}")
+#
+# #updates the entire google sheet from data frame
+# wks2.update([gsheet1.columns.values.tolist()] + gsheet1.values.tolist(), value_input_option='USER_ENTERED')
+#
+# #formats google sheet
+# wks2.format("A2:K400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend"}})
+# wks2.format("G2:G400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "horizontalAlignment": "CENTER"})
+# wks2.format("E2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "DATE"}, "horizontalAlignment": "CENTER"})
 
 for index, row in gsheet2.iterrows():
     old2 = gsheet2

@@ -9,3 +9,4 @@ python-dotenv
 py-cord
 mailersend
 email
+atproto

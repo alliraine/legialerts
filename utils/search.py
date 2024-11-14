@@ -79,13 +79,13 @@ def search(term, page, interactive):
 
             if lscan.empty and lscan2.empty and lscan5.empty and lscan6.empty:
                 if bill["last_action_date"] is not None:
-                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2024, 2, 15):
+                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2024, 3, 8):
                         print(color.RED, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                           bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 2, 15):
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 3, 8):
                         print(color.YELLOW, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 2, 13):
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 3, 6):
                         print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"])
                 else:

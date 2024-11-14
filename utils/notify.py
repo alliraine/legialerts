@@ -3,9 +3,28 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+import tweepy
+from atproto import Client as BSKYClient
+
+from utils.bsky_helper import send_skeet
+from utils.twitter_helper import send_tweet
+
+curr_path = os.path.dirname(__file__)
 
 sender = "hello@legialerts.com"
 password = os.environ.get('GOOGLE_TOKEN')
+
+def notify_social(msg):
+    twitter = tweepy.Client(
+        consumer_key=os.environ.get('twitter_consumer_key'),
+        consumer_secret=os.environ.get('twitter_consumer_secret'),
+        access_token=os.environ.get('twitter_access_token'),
+        access_token_secret=os.environ.get('twitter_access_token_secret')
+    )
+    bsky = BSKYClient()
+    print(bsky.login(os.environ.get('bsky_user'), os.environ.get('bsky_pass')))
+    send_tweet(msg, twitter)
+    send_skeet(msg, bsky)
 
 def notify_legi_team(subject, content):
     to = ["hello@legialerts.com", "allichapman22@gmail.com"]
@@ -40,3 +59,24 @@ def send_email(to, subject, content):
        smtp_server.login(sender, password)
        smtp_server.sendmail(sender, to, msg.as_string())
     print("Message sent!")
+
+def send_history_report(report):
+    html = open(f"{curr_path}/email.html", "r")
+    email = html.read()
+    email = email.replace("{subject}", "New status for bills")
+    email = email.replace("{preview}", "New History on bills!")
+    email = email.replace("{pre-text}", "Hey there! <br><br> Here is the latest updates as of the last bot run.")
+    email = email.replace("{data-table}", report)
+    notify_legi_team("New status for bills", email)
+    html.close()
+
+def send_new_report(report):
+    html = open(f"{curr_path}/email.html", "r")
+    email = html.read()
+    email = email.replace("{subject}", "New bills added to tracker")
+    email = email.replace("{preview}", "New bills added to the tracker!")
+    email = email.replace("{pre-text}",
+                          "Hey there! <br><br> Here are the new bills that have been added to the tracker as of the latest bot run:")
+    email = email.replace("{data-table}", report)
+    notify_world("New bills added to tracker!", email)
+    html.close()
