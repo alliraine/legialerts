@@ -233,4 +233,8 @@ def main():
         send_new_report(new_report)
 
 if __name__ == "__main__":
-    main()
+    while True:
+        print("running")
+        main()
+        print("sleeping")
+        time.sleep(899)
