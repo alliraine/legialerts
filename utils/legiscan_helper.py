@@ -28,4 +28,4 @@ def get_history(list):
         if history != "":
             history = history + ", "
         history = history + event["chamber"] + " " + event["date"] + " " + event["action"]
-    return history
+    return history[0:49000] + ".... see more on LegiScan"

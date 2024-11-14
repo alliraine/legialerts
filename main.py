@@ -1,16 +1,13 @@
-import json
 import os.path
 import requests
 import gspread
 
 import pandas as pd
-import tweepy
 import time
 
 from utils.get_sessions import get_sessions_dataframe
-from utils.notify import notify_world, notify_dev_team, notify_legi_team
-from utils.risk import ADULT_RISK, YOUTH_RISK
-from utils.twitter_helper import send_tweet
+from utils.notify import notify_world, notify_dev_team, notify_legi_team, send_history_report, send_new_report, \
+    notify_social
 from utils.legiscan_helper import get_calendar, get_sponsors, get_history, get_texts
 
 from dotenv import load_dotenv
@@ -32,11 +29,27 @@ legi_key = os.environ.get('legiscan_key')
 Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
-years = [2023, 2024]
+years = [2024, 2025]
 
-team_report = ""
-dev_report = ""
 world_report = ""
+dev_report = ""
+history_report = """
+<tr>
+    <th>State</th>
+    <th>Bill</th>
+    <th>New History</th>
+</tr>
+"""
+new_report = """
+<tr>
+    <th>State</th>
+    <th>Bill</th>
+    <th>Title</th>
+    <th>Type</th>
+</tr>
+"""
+
+dev_report_updates, new_report_updates, history_report_updates = 0, 0, 1
 
 def get_main_lists(year):
     session_list_file = f"{curr_path}/cache/sessions.csv"
@@ -70,6 +83,7 @@ def get_main_lists(year):
                 print("Cache doesn't exist or is stale. Pulling from Legiscan")
                 # Pull session master list from Legiscan
                 r = requests.get(Master_List_URL + str(s_id))
+                print(Master_List_URL + str(s_id))
                 content = r.json()["masterlist"]
                 temp_list = []
                 for attribute, value in content.items():
@@ -86,17 +100,11 @@ def get_main_lists(year):
     return all_lists
 
 def update_worksheet(year, worksheet, new_title, change_title, rollover = False):
-    global world_report, team_report, dev_report
+    global world_report, history_report, dev_report, new_report, new_report_updates, history_report_updates, dev_report_updates
     print(f"starting {year} {worksheet}")
     all_lists = get_main_lists(year)
     if rollover:
         all_lists = get_main_lists(year-1)
-    twitter = tweepy.Client(
-        consumer_key=os.environ.get('twitter_consumer_key'),
-        consumer_secret=os.environ.get('twitter_consumer_secret'),
-        access_token=os.environ.get('twitter_access_token'),
-        access_token_secret=os.environ.get('twitter_access_token_secret')
-    )
 
     #open google sheets api account
     gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
@@ -106,6 +114,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
     expected_headers = wks.row_values(1)
 
     #loads worksheet into dataframe
+    print(expected_headers)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
 
     #gets previous sheet from file
@@ -130,10 +139,17 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
 
                     #checks if the bill is recently added. If not then alert new bill
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
-                        t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Adult State Risk: {ADULT_RISK[r_state]} \n🚦Youth State Risk: {YOUTH_RISK[r_state]}\n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
-                        send_tweet(t, twitter)
-                        team_report = team_report + "\n" + t
-                        world_report = world_report + "\n" + t
+                        t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
+                        notify_social(t)
+                        new_report_updates += 1
+                        new_report = new_report + f"""
+                                                    <tr>
+                                                        <th>{r_state}</th>
+                                                        <th>{r_bnum.strip()}</th>
+                                                        <th>{r_title}</th>
+                                                        <th>{r_btype}</th>
+                                                    </tr>
+                                                    """
 
                         r = requests.get(Bill_URL + str(bill_id))
                         content = r.json()["bill"]
@@ -148,15 +164,22 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                     #if not new check change hash to see if the bill has changed. If it has trigger an alert
                     elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                         print("Bill Change Found")
-                        t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🚦Adult State Risk: {ADULT_RISK[r_state]} \n🚦Youth State Risk: {YOUTH_RISK[r_state]}\n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
-                        send_tweet(t, twitter)
-                        team_report = team_report + "\n" + t
-                        world_report = world_report + "\n" + t
+                        t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
+                        notify_social(t)
                         r = requests.get(Bill_URL + str(bill_id))
                         content = r.json()["bill"]
 
                         gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
-                        gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
+                        gsheet.at[index,'Calendar'] = get_calendar(content["calendar"])
+                        if get_history(content['history']) != gsheet.at[index, 'History']:
+                            history_report_updates += 1
+                            history_report = history_report + f"""
+                            <tr>
+                                <th>{r_state}</th>
+                                <th>{r_bnum.strip()}</th>
+                                <th>{get_history(content['history']).replace(gsheet.at[index, 'History'], "")}</th>
+                            </tr>
+                            """
                         gsheet.at[index, 'History'] = get_history(content["history"])
                         gsheet.at[index, 'Bill ID'] = str(bill_id)
                         gsheet.at[index, "PDF"] = get_texts(content["texts"])
@@ -174,15 +197,12 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
 
                 else:
                     gsheet.at[index, 'Date'] = "Unknown"
-                gsheet.at[index, 'Youth State Risk'] = YOUTH_RISK[r_state]
-                gsheet.at[index, 'Adult State Risk'] = ADULT_RISK[r_state]
             else:
                 gsheet.at[index, 'Date'] = "Unknown"
-                gsheet.at[index, 'Youth State Risk'] = YOUTH_RISK[r_state]
-                gsheet.at[index, 'Adult State Risk'] = ADULT_RISK[r_state]
         except Exception as e:
-            print("Ran into error")
-            dev_report = dev_report + "\n" + str(e)
+            print("Ran into error", e)
+            dev_report_updates += 1
+            dev_report = dev_report + "\n" + str(e.args[0])
     gsheet = gsheet.fillna('Unknown')
 
     #updates the entire google sheet from data frame
@@ -204,9 +224,13 @@ def main():
         update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛")
     update_worksheet(2024, "Rollover Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
 
-    notify_dev_team("Bot Run", dev_report)
-    notify_world("Latest Changes", world_report)
-    notify_legi_team("Latest Bot Run", team_report)
+    if dev_report_updates > 0:
+        notify_dev_team("Bot Run", dev_report)
+    # notify_world("Latest Changes", world_report)
+    if history_report_updates > 0:
+        send_history_report(history_report)
+    if new_report_updates > 0:
+        send_new_report(new_report)
 
 if __name__ == "__main__":
     main()
