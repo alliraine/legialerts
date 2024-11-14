@@ -10,7 +10,7 @@ def bad_bills(year):
     )
 
     #open google sheets api account
-    gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
+    gc = gspread.service_account_from_dict(os.environ.get('gsuite_service_account'))
 
     #open worksheet
     wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).sheet1
@@ -123,7 +123,7 @@ def good_bills(year):
     )
 
     #open google sheets api account
-    gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
+    gc = gspread.service_account_from_dict(os.environ.get('gsuite_service_account'))
 
     #open worksheet
     wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).worksheet("Pro-LGBTQ Bills")
@@ -232,7 +232,7 @@ def rollover(prev_year, year):
     )
 
     #open google sheets api account
-    gc = gspread.service_account(filename=f"{curr_path}/legialerts.json")
+    gc = gspread.service_account_from_dict(os.environ.get('gsuite_service_account'))
 
     #open worksheet
     wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).worksheet("2023 Rollover Anti-LGBTQ Bills")
