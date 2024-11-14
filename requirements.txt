@@ -8,5 +8,4 @@ google-auth-oauthlib
 python-dotenv
 py-cord
 mailersend
-email
 atproto
