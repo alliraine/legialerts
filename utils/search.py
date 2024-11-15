@@ -85,7 +85,7 @@ def search(term, page, interactive):
                     elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 11, 15):
                         print(color.YELLOW, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 11, 1):
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 11, 13):
                         print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"])
                 else:
