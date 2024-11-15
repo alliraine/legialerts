@@ -129,8 +129,8 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
             r_state = row["State"].strip()
             r_bnum = row["Number"]
             r_btype = row["Bill Type"]
-            gsheet.at[index, 'Youth State Risk'] = f"=VLOOKUP(A2,'Risk Levels'!$A$4:$E$55,2)"
-            gsheet.at[index, 'Adult State Risk'] = f"=VLOOKUP(A2,'Risk Levels'!$A$4:$E$55,3)"
+            gsheet.at[index, 'Youth State Risk'] = f"=VLOOKUP(A{index},'Risk Levels'!$A$4:$E$55,2)"
+            gsheet.at[index, 'Adult State Risk'] = f"=VLOOKUP(A{index},'Risk Levels'!$A$4:$E$55,3)"
             if not all_lists[r_state].empty:
                 lscan = all_lists[r_state].loc[all_lists[r_state]["number"] == r_bnum.strip()]
                 if not lscan.empty:
