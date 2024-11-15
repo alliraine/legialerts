@@ -129,6 +129,8 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
             r_state = row["State"].strip()
             r_bnum = row["Number"]
             r_btype = row["Bill Type"]
+            gsheet.at[index, 'Youth State Risk'] = f"=VLOOKUP(A2,'Risk Levels'!$A$4:$E$55,2)"
+            gsheet.at[index, 'Adult State Risk'] = f"=VLOOKUP(A2,'Risk Levels'!$A$4:$E$55,3)"
             if not all_lists[r_state].empty:
                 lscan = all_lists[r_state].loc[all_lists[r_state]["number"] == r_bnum.strip()]
                 if not lscan.empty:
@@ -195,11 +197,11 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                     gsheet.at[index, 'Summary'] = lscan.iloc[0]["title"]
                     gsheet.at[index, 'Change Hash'] = lscan.iloc[0]["change_hash"]
                     gsheet.at[index, 'URL'] = f"=HYPERLINK(\"{r_link}\",\"{r_link}\")"
-
                 else:
                     gsheet.at[index, 'Date'] = "Unknown"
             else:
                 gsheet.at[index, 'Date'] = "Unknown"
+
         except Exception as e:
             print("Ran into error", e)
             dev_report_updates += 1
@@ -223,11 +225,8 @@ def main():
     for year in years:
         update_worksheet(year, "Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
         update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛")
-    update_worksheet(2024, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
-    update_worksheet(2024, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
-    update_worksheet(2025, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
-    update_worksheet(2025, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
-
+        update_worksheet(year, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
+        update_worksheet(year, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
 
     if dev_report_updates > 0:
         notify_dev_team("Bot Run", dev_report)
