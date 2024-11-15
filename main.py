@@ -50,7 +50,7 @@ new_report = """
 </tr>
 """
 
-dev_report_updates, new_report_updates, history_report_updates = 0, 0, 1
+dev_report_updates, new_report_updates, history_report_updates = 0, 0, 0
 
 def get_main_lists(year):
     session_list_file = f"{curr_path}/cache/sessions.csv"
@@ -233,7 +233,7 @@ def main():
         update_worksheet(year, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
 
     if dev_report_updates > 0:
-        notify_dev_team("Bot Run", dev_report)
+        notify_dev_team("Error occured with latest bot run!", dev_report)
     # notify_world("Latest Changes", world_report)
     if history_report_updates > 0:
         send_history_report(history_report)
