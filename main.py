@@ -215,6 +215,10 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
     wks.format("A2:K400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend"}})
     wks.format("G2:G400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "horizontalAlignment": "CENTER"})
     wks.format("E2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "DATE"}, "horizontalAlignment": "CENTER"})
+    wks.format("B2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "AUTOMATIC"}, "horizontalAlignment": "CENTER"})
+    wks.format("J2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "AUTOMATIC"}, "horizontalAlignment": "CENTER"})
+    wks.format("Q2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "AUTOMATIC"}, "horizontalAlignment": "CENTER"})
+
 
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
