@@ -223,7 +223,11 @@ def main():
     for year in years:
         update_worksheet(year, "Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
         update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛")
-    update_worksheet(2024, "Rollover Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
+    update_worksheet(2024, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
+    update_worksheet(2024, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
+    update_worksheet(2025, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
+    update_worksheet(2025, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
+
 
     if dev_report_updates > 0:
         notify_dev_team("Bot Run", dev_report)
