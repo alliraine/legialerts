@@ -140,7 +140,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
 
                     #checks if the bill is recently added. If not then alert new bill
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
-                        t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text:{r_link} "
+                        t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link} "
                         notify_social(t)
                         new_report_updates += 1
                         new_report = new_report + f"""
@@ -165,7 +165,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                     #if not new check change hash to see if the bill has changed. If it has trigger an alert
                     elif lscan.iloc[0]["change_hash"] != row["Change Hash"] and (lscan.iloc[0]["last_action"] != row["Status"] or lscan.iloc[0]["last_action_date"] != row["Date"]):
                         print("Bill Change Found")
-                        t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text:{r_link}"
+                        t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link}"
                         notify_social(t)
                         r = requests.get(Bill_URL + str(bill_id))
                         content = r.json()["bill"]
