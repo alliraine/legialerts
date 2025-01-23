@@ -79,13 +79,13 @@ def search(term, page, interactive):
 
             if lscan.empty and lscan2.empty and lscan3.empty and lscan4.empty and lscan5.empty and lscan6.empty:
                 if bill["last_action_date"] is not None:
-                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2024, 11, 15):
+                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2025, 1, 17):
                         print(color.RED, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                           bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 11, 15):
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 16):
                         print(color.YELLOW, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2024, 11, 13):
+                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 15):
                         print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
                               bill["title"], bill["text_url"])
                 else:
@@ -114,7 +114,7 @@ def search(term, page, interactive):
 gc = gspread.service_account_from_dict(json.loads(os.environ.get('gsuite_service_account')))
 
 # open worksheet
-wks = gc.open_by_key(os.environ.get('gsheet_key_2024')).sheet1
+wks = gc.open_by_key(os.environ.get('gsheet_key_2024')).worksheet("Anti-LGBTQ Bills")
 expected_headers = wks.row_values(1)
 
 # loads worksheet into dataframe
@@ -128,14 +128,14 @@ expected_headers2 = wks2.row_values(1)
 prev_gsheet2 = pd.DataFrame(wks2.get_all_records(expected_headers=expected_headers2))
 
 # open worksheet
-wks3 = gc.open_by_key(os.environ.get('gsheet_key_2025')).sheet1
+wks3 = gc.open_by_key(os.environ.get('gsheet_key_2025')).worksheet("Anti-LGBTQ Bills")
 expected_headers3 = wks3.row_values(1)
 
 # loads worksheet into dataframe
 prev_gsheet3 = pd.DataFrame(wks3.get_all_records(expected_headers=expected_headers3))
 
 # open worksheet
-wks4 = gc.open_by_key(os.environ.get('gsheet_key_2025')).worksheet("Pro-LGBTQ Bills")
+wks4 = gc.open_by_key(os.environ.get('gsheet_key_2024')).worksheet("Pro-LGBTQ Bills")
 expected_headers4 = wks4.row_values(1)
 
 # loads worksheet into dataframe
@@ -184,6 +184,8 @@ if u_input == "bill pass":
     search("\"Biological sex\" or \"puberty\" or \"hormone\" or \"bathroom\" or \"restroom\" or \"gender marker\" or "
            "\"sex marker\" or \"sex designation\" or \"gender affirming\" Or \"drag\" OR \"gender change\" or "
            "\"transgender\"", 1, False)
+
+    print (f"completed at {datetime.now()}")
 
 else:
     search(u_input, 1, False)

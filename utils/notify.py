@@ -23,8 +23,11 @@ def notify_social(msg):
     )
     bsky = BSKYClient()
     print(bsky.login(os.environ.get('bsky_user'), os.environ.get('bsky_pass')))
-    send_tweet(msg, twitter)
-    send_skeet(msg, bsky)
+    try:
+        send_tweet(msg, twitter)
+        send_skeet(msg, bsky)
+    except Exception as e:
+        print("Unable to send social notifications. Full error:", e)
 
 def notify_legi_team(subject, content):
     to = ["hello@legialerts.com", "allichapman22@gmail.com"]
