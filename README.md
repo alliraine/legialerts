@@ -1,5 +1,5 @@
 # LegiAlerts
-A Twitter Bot and automation platform for tracking anti-lgbtq legislation. This updates our spreadsheet at https://legialerts.com
+A Twitter Bot and automation platform for tracking anti-lgbtq legislation. This updates our spreadsheet at https://legialerts.org
 The bot runs via a cronjob every 15 minutes on a DigitalOcean droplet
 
 
