@@ -30,7 +30,7 @@ legi_key = os.environ.get('legiscan_key')
 Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
-years = [2024, 2025]
+years = [2025]
 
 world_report = ""
 dev_report = ""
@@ -80,7 +80,7 @@ def get_main_lists(year):
 
         for s_file in s_files:
             # checks cache if stale or doesn't exist pull (we can pull new data every hour)
-            if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 1 * 60 * 60:
+            if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 3 * 60 * 60:
                 print("Cache doesn't exist or is stale. Pulling from Legiscan")
                 # Pull session master list from Legiscan
                 r = requests.get(Master_List_URL + str(s_id))
