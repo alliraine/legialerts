@@ -32,24 +32,15 @@ class color:
     END = '\033[0m'
 
 
-def search(term, page, interactive):
+def search(term, page):
     global ignore_list
     Search_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSearch&state=ALL&page={page}&query="
     r = requests.get(Search_URL + str(term))
     content = r.json()["searchresult"]
+    bills = []
     for e in content:
         if e != "summary":
-            bill = content[
-                e]  # {'relevance': 98, 'state': 'MI', 'bill_number': 'HJRE', 'bill_id': 1771836, 'change_hash': 'de6b4d0f455fe65d8c9f3f44fa911121', 'url': 'https://legiscan.com/MI/bill/HJRE/2023', 'text_url': 'https://legiscan.com/MI/text/HJRE/2023', 'research_url': 'https://legiscan.com/MI/research/HJRE/2023', 'last_action_date': '2023-06-15', 'last_action': 'Printed Joint Resolution Filed 06/14/2023', 'title': "Women: other; women's bill of rights; provide for. Amends the state constitution by adding sec. 29 to art. I."}
-            # lscan = prev_gsheet.loc[(prev_gsheet["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet["Number"] == bill["bill_number"]) & (prev_gsheet["Summary"] == bill["title"])]
-            #
-            # lscan2 = prev_gsheet2.loc[(prev_gsheet2["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet2["Number"] == bill["bill_number"]) & (prev_gsheet2["Summary"] == bill["title"])]
-            #
-            # lscan3 = prev_gsheet3.loc[(prev_gsheet3["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet3["Number"] == bill["bill_number"]) & (prev_gsheet3["Summary"] == bill["title"])]
-            #
-            # lscan4 = prev_gsheet4.loc[(prev_gsheet4["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet4["Number"] == bill["bill_number"]) & (prev_gsheet4["Summary"] == bill["title"])]
-            #
-            # lscan5 = prev_gsheet5.loc[(prev_gsheet5["State"] == abbrev_to_us_state[bill["state"]]) & (prev_gsheet5["Number"] == bill["bill_number"]) & (prev_gsheet5["Summary"] == bill["title"])]
+            bill = content[e]  # {'relevance': 98, 'state': 'MI', 'bill_number': 'HJRE', 'bill_id': 1771836, 'change_hash': 'de6b4d0f455fe65d8c9f3f44fa911121', 'url': 'https://legiscan.com/MI/bill/HJRE/2023', 'text_url': 'https://legiscan.com/MI/text/HJRE/2023', 'research_url': 'https://legiscan.com/MI/research/HJRE/2023', 'last_action_date': '2023-06-15', 'last_action': 'Printed Joint Resolution Filed 06/14/2023', 'title': "Women: other; women's bill of rights; provide for. Amends the state constitution by adding sec. 29 to art. I."}
 
             lscan = prev_gsheet.loc[(prev_gsheet["Bill ID"] == bill["bill_id"]) | (
                         (prev_gsheet["State"] == abbrev_to_us_state[bill["state"]]) & (
@@ -78,36 +69,11 @@ def search(term, page, interactive):
             lscan6 = ignore_list.loc[(ignore_list["bill_id"] == bill["bill_id"])]
 
             if lscan.empty and lscan2.empty and lscan3.empty and lscan4.empty and lscan5.empty and lscan6.empty:
-                if bill["last_action_date"] is not None:
-                    if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2025, 1, 17):
-                        print(color.RED, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
-                          bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 16):
-                        print(color.YELLOW, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
-                              bill["title"], bill["text_url"], color.END)
-                    elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 15):
-                        print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
-                              bill["title"], bill["text_url"])
-                else:
-                    print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
-                      bill["title"], bill["text_url"])
-                if interactive:
-                    u_input = input('Do you want to add this bill?\n')
-                    while u_input.lower() not in ('y', 'n', 's'):
-                        print(u_input.lower() + "  is not a valid answer\n")
-                        print(abbrev_to_us_state[bill["state"]], bill["bill_number"], bill["title"], bill["text_url"])
-                        u_input = input('Do you want to add this bill?\n')
-                    if u_input.lower() == "n":
-                        df2 = pd.DataFrame([[bill["bill_id"], bill["state"], bill["bill_number"],
-                                             datetime.strptime(bill["last_action_date"], '%Y-%m-%d').strftime(
-                                                 "%-d/%-m/%Y")]],
-                                           columns=["bill_id", "state", "bill_number", "last_action_date"])
-                        ignore_list = pd.concat([ignore_list, df2], ignore_index=True)
-                    if u_input.lower() == "s":
-                        ignore_list.to_json("../cache/ignore_list.json")
+                bills.append(bill)
 
     if content["summary"]["page_total"] > page:
-        search(term, page + 1, interactive)
+        bills.extend(search(term, page + 1))
+    return bills
 
 
 # open google sheets api account
@@ -151,43 +117,57 @@ prev_gsheet5 = pd.DataFrame(wks5.get_all_records(expected_headers=expected_heade
 
 ignore_list = pd.read_json("../cache/ignore_list.json")
 
+bills = []
+
 print("Welcome to LegiAlerts Search!\n\n ")
-u_input = input('Please enter your search terms:\n')
+# u_input = input('Please enter your search terms:\n')
 
-if u_input == "bill pass":
-    print("\nDrag Bills:\n")
-    search("\"drag\" NOT \"race\" NOT \"racing\"", 1, False)
-    print("\nBiological Sex Bills:\n")
-    search("\"biological sex\"", 1, False)
-    print("\nGender Affirming Bills:\n")
-    search("\"gender affirming\"", 1, False)
-    print("\nPronouns Bills:\n")
-    search("\"pronouns\"", 1, False)
-    print("\nFemale impersonator Bills:\n")
-    search("\"female impersonator\"", 1, False)
-    print("\nGender Reassignment Bills:\n")
-    search("\"gender reassignment\"", 1, False)
-    print("\nSex Reassignment Bills:\n")
-    search("\"sex reassignment\"", 1, False)
-    print("\nCross Sex Bills:\n")
-    search("\"cross sex\"", 1, False)
-    print("\nObscene Bills:\n")
-    search("\"obscene\"", 1, False)
-    print("\nGroom Bills:\n")
-    search("\"groom\"", 1, False)
+# print("\nDrag Bills:\n")
+bills.extend(search("\"drag\" NOT \"race\" NOT \"racing\"", 1))
+# print("\nBiological Sex Bills:\n")
+bills.extend(search("\"biological sex\"", 1))
+# print("\nGender Affirming Bills:\n")
+bills.extend(search("\"gender affirming\"", 1))
+# print("\nPronouns Bills:\n")
+bills.extend(search("\"pronouns\"", 1))
+# print("\nFemale impersonator Bills:\n")
+bills.extend(search("\"female impersonator\"", 1))
+# print("\nGender Reassignment Bills:\n")
+bills.extend(search("\"gender reassignment\"", 1))
+# print("\nSex Reassignment Bills:\n")
+bills.extend(search("\"sex reassignment\"", 1))
+# print("\nCross Sex Bills:\n")
+bills.extend(search("\"cross sex\"", 1))
+# print("\nObscene Bills:\n")
+bills.extend(search("\"obscene\"", 1))
+# print("\nGroom Bills:\n")
+bills.extend(search("\"groom\"", 1))
+#
+# print("\nGeneral Polyamory terms:\n")
+bills.extend(search("\"polyamory\"", 1))
+bills.extend(search("\"multiple partners\"", 1))
+#
+# print("\nErin's Search Terms")
+bills.extend(search("\"Biological sex\" or \"puberty\" or \"hormone\" or \"bathroom\" or \"restroom\" or \"gender marker\" or "
+        "\"sex marker\" or \"sex designation\" or \"gender affirming\" Or \"drag\" OR \"gender change\" or "
+        "\"transgender\"", 1))
 
-    print("\nGeneral Polyamory terms:\n")
-    search("\"polyamory\"", 1, False)
-    search("\"multiple partners\"", 1, False)
+bills_seen = []
+for bill in bills:
+    if bill["bill_id"] not in bills_seen:
+        bills_seen.append(bill["bill_id"])
+        if bill["last_action_date"] is not None:
+            if datetime.strptime(bill["last_action_date"], '%Y-%m-%d') == datetime(2025, 1, 17):
+                print(color.RED, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                      bill["title"], bill["text_url"], color.END)
+            elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 16):
+                print(color.YELLOW, bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                      bill["title"], bill["text_url"], color.END)
+            elif datetime.strptime(bill["last_action_date"], '%Y-%m-%d') > datetime(2025, 1, 15):
+                print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                      bill["title"], bill["text_url"])
+        else:
+            print(bill["last_action_date"], abbrev_to_us_state[bill["state"]], bill["bill_number"],
+                  bill["title"], bill["text_url"])
 
-    print("\nErin's Search Terms")
-    search("\"Biological sex\" or \"puberty\" or \"hormone\" or \"bathroom\" or \"restroom\" or \"gender marker\" or "
-           "\"sex marker\" or \"sex designation\" or \"gender affirming\" Or \"drag\" OR \"gender change\" or "
-           "\"transgender\"", 1, False)
-
-    print (f"completed at {datetime.now()}")
-
-else:
-    search(u_input, 1, False)
-
-ignore_list.to_json("../cache/ignore_list.json")
+print (f"completed at {datetime.now()}")
