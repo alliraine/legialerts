@@ -52,14 +52,54 @@ new_report = """
 
 dev_report_updates, new_report_updates, history_report_updates = 0, 0, 0
 
-def get_main_lists(year):
+BILL_CACHE_DIR = os.path.join(curr_path, "cache", "bills")
+
+def load_bill_cache(bill_id, expected_change_hash):
+    cache_path = os.path.join(BILL_CACHE_DIR, f"{bill_id}.json")
+    if not os.path.exists(cache_path):
+        return None
+    try:
+        with open(cache_path, "r") as handle:
+            cached = json.load(handle)
+        if cached.get("change_hash") == expected_change_hash:
+            return cached.get("bill")
+    except Exception:
+        return None
+    return None
+
+def save_bill_cache(bill_id, change_hash, bill):
+    os.makedirs(BILL_CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(BILL_CACHE_DIR, f"{bill_id}.json")
+    with open(cache_path, "w") as handle:
+        json.dump({"change_hash": change_hash, "bill": bill}, handle)
+
+def get_bill_details(bill_id, change_hash, session):
+    cached = load_bill_cache(bill_id, change_hash)
+    if cached is not None:
+        return cached
+    r = session.get(Bill_URL + str(bill_id))
+    content = r.json()["bill"]
+    save_bill_cache(bill_id, change_hash, content)
+    return content
+
+def row_missing_details(row):
+    required_fields = ["Sponsors", "Calendar", "History", "PDF", "Bill ID"]
+    for field in required_fields:
+        value = row.get(field)
+        if value is None:
+            return True
+        if isinstance(value, str) and value.strip() in ("", "Unknown"):
+            return True
+    return False
+
+def get_main_lists(year, session):
     session_list_file = f"{curr_path}/cache/sessions.csv"
 
     all_lists = {}
 
     # pull new session list every 24 hours
     if (not os.path.exists(session_list_file)) or (os.path.getmtime(session_list_file)) <= time.time() - 1 * 60 * 60 * 24:
-        df = get_sessions_dataframe()
+        df = get_sessions_dataframe(session=session)
     else:
         print("Loading sessions_list from Cache")
         df = pd.read_csv(session_list_file)
@@ -83,7 +123,7 @@ def get_main_lists(year):
             if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 3 * 60 * 60:
                 print("Cache doesn't exist or is stale. Pulling from Legiscan")
                 # Pull session master list from Legiscan
-                r = requests.get(Master_List_URL + str(s_id))
+                r = session.get(Master_List_URL + str(s_id))
                 print(Master_List_URL + str(s_id))
                 content = r.json()["masterlist"]
                 temp_list = []
@@ -100,12 +140,12 @@ def get_main_lists(year):
 
     return all_lists
 
-def update_worksheet(year, worksheet, new_title, change_title, rollover = False):
+def update_worksheet(year, worksheet, new_title, change_title, session, rollover = False):
     global world_report, history_report, dev_report, new_report, new_report_updates, history_report_updates, dev_report_updates
     print(f"starting {year} {worksheet}")
-    all_lists = get_main_lists(year)
+    all_lists = get_main_lists(year, session)
     if rollover:
-        all_lists = get_main_lists(year-1)
+        all_lists = get_main_lists(year-1, session)
 
     #open google sheets api account
     gc = gspread.service_account_from_dict(json.loads(os.environ.get('gsuite_service_account')))
@@ -138,6 +178,7 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                     r_title = lscan.iloc[0]["title"]
                     r_link = lscan.iloc[0]["url"]
                     bill_id = lscan.iloc[0]["bill_id"]
+                    change_hash = lscan.iloc[0]["change_hash"]
                     prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
 
                     #checks if the bill is recently added. If not then alert new bill
@@ -154,12 +195,12 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                                                     </tr>
                                                     """
 
-                        r = requests.get(Bill_URL + str(bill_id))
-                        content = r.json()["bill"]
+                        content = get_bill_details(bill_id, change_hash, session)
 
                         gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
                         gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
-                        gsheet.at[index, 'History'] = get_history(content["history"])
+                        history_value = get_history(content["history"])
+                        gsheet.at[index, 'History'] = history_value
                         gsheet.at[index, 'Bill ID'] = str(bill_id)
                         gsheet.at[index, "PDF"] = get_texts(content["texts"])
 
@@ -169,20 +210,27 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
                         print("Bill Change Found")
                         t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link}"
                         notify_social(t)
-                        r = requests.get(Bill_URL + str(bill_id))
-                        content = r.json()["bill"]
+                        content = get_bill_details(bill_id, change_hash, session)
 
                         gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
                         gsheet.at[index,'Calendar'] = get_calendar(content["calendar"])
-                        if get_history(content['history']) != gsheet.at[index, 'History']:
+                        history_value = get_history(content["history"])
+                        if history_value != gsheet.at[index, 'History']:
                             history_report_updates += 1
                             history_report = history_report + f"""
                             <tr>
                                 <th>{r_state}</th>
                                 <th>{r_bnum.strip()}</th>
-                                <th>{get_history(content['history']).replace(gsheet.at[index, 'History'], "")}</th>
+                                <th>{history_value.replace(gsheet.at[index, 'History'], "")}</th>
                             </tr>
                             """
+                        gsheet.at[index, 'History'] = history_value
+                        gsheet.at[index, 'Bill ID'] = str(bill_id)
+                        gsheet.at[index, "PDF"] = get_texts(content["texts"])
+                    elif row_missing_details(row):
+                        content = get_bill_details(bill_id, change_hash, session)
+                        gsheet.at[index, 'Sponsors'] = get_sponsors(content["sponsors"])
+                        gsheet.at[index, 'Calendar'] = get_calendar(content["calendar"])
                         gsheet.at[index, 'History'] = get_history(content["history"])
                         gsheet.at[index, 'Bill ID'] = str(bill_id)
                         gsheet.at[index, "PDF"] = get_texts(content["texts"])
@@ -226,11 +274,12 @@ def update_worksheet(year, worksheet, new_title, change_title, rollover = False)
     gsheet.to_csv(f"{curr_path}/cache/gsheet-{worksheet}-{year}.csv")
 
 def main():
+    session = requests.Session()
     for year in years:
-        update_worksheet(year, "Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛")
-        update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛")
-        update_worksheet(year, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛")
-        update_worksheet(year, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛")
+        update_worksheet(year, "Anti-LGBTQ Bills", "🚨ALERT NEW BILL 🚨", "🏛 Status Change 🏛", session)
+        update_worksheet(year, "Pro-LGBTQ Bills", "🌈NEW GOOD BILL 🏳️‍", "🌈Status Change 🏛", session)
+        update_worksheet(year, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛", session)
+        update_worksheet(year, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛", session)
 
     if dev_report_updates > 0:
         notify_dev_team("Error occured with latest bot run!", dev_report)
