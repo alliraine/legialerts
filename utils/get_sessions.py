@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 curr_path = os.path.dirname(__file__)
+base_path = os.path.join(curr_path, "..")
+PRODUCTION = os.environ.get("PRODUCTION", "").strip().lower() in ("1", "true", "yes", "on")
+CACHE_DIR = "/var/data" if PRODUCTION else os.path.join(base_path, "cache")
 legi_key = os.environ.get('legiscan_key')
 Session_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSessionList"
 logger = logging.getLogger(__name__)
@@ -32,5 +35,6 @@ def get_sessions_dataframe(session=None, request_fn=None):
         logger.error("LegiScan session list missing 'sessions' key. Response: %s", data)
         return pd.DataFrame()
     df = pd.DataFrame(sessions)
-    df.to_csv(f"./cache/sessions.csv")
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    df.to_csv(os.path.join(CACHE_DIR, "sessions.csv"))
     return df

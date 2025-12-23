@@ -97,7 +97,8 @@ def stats():
     for year in years:
         year_stats = {}
         for worksheet in WORKSHEETS:
-            cache_path = os.path.join(legi_main.curr_path, "cache", f"gsheet-{worksheet}-{year}.csv")
+            cache_dir = getattr(legi_main, "CACHE_DIR", os.path.join(legi_main.curr_path, "cache"))
+            cache_path = os.path.join(cache_dir, f"gsheet-{worksheet}-{year}.csv")
             year_stats[worksheet] = _sheet_stats(cache_path)
         results["worksheets"][str(year)] = year_stats
     return jsonify(results), 200

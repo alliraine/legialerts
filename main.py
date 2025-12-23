@@ -18,9 +18,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 curr_path = os.path.dirname(__file__)
+PRODUCTION = os.environ.get("PRODUCTION", "").strip().lower() in ("1", "true", "yes", "on")
+CACHE_DIR = "/var/data" if PRODUCTION else os.path.join(curr_path, "cache")
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
-LOG_FILE = os.environ.get("LOG_FILE", os.path.join(curr_path, "cache", "legialerts.log"))
+LOG_FILE = os.environ.get("LOG_FILE", os.path.join(CACHE_DIR, "legialerts.log"))
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 logging.basicConfig(
@@ -67,7 +69,7 @@ new_report = """
 """
 
 dev_report_updates, new_report_updates, history_report_updates = 0, 0, 0
-BILL_CACHE_DIR = os.path.join(curr_path, "cache", "bills")
+BILL_CACHE_DIR = os.path.join(CACHE_DIR, "bills")
 LEGISCAN_MIN_INTERVAL = float(os.environ.get("LEGISCAN_MIN_INTERVAL", "0"))
 SESSION_LIST_REFRESH_SECONDS = 24 * 60 * 60
 MASTER_LIST_REFRESH_SECONDS = 60 * 60
@@ -203,7 +205,7 @@ def worksheet_legiscan_digest(gsheet, master_index):
 
 def load_worksheet_digest(worksheet, year):
     safe_name = worksheet.replace(" ", "_").replace("/", "_")
-    digest_path = os.path.join(curr_path, "cache", f"digest-{safe_name}-{year}.txt")
+    digest_path = os.path.join(CACHE_DIR, f"digest-{safe_name}-{year}.txt")
     if not os.path.exists(digest_path):
         return None
     try:
@@ -214,13 +216,13 @@ def load_worksheet_digest(worksheet, year):
 
 def save_worksheet_digest(worksheet, year, digest):
     safe_name = worksheet.replace(" ", "_").replace("/", "_")
-    digest_path = os.path.join(curr_path, "cache", f"digest-{safe_name}-{year}.txt")
+    digest_path = os.path.join(CACHE_DIR, f"digest-{safe_name}-{year}.txt")
     os.makedirs(os.path.dirname(digest_path), exist_ok=True)
     with open(digest_path, "w") as handle:
         handle.write(digest)
 
 def get_main_lists(year, session):
-    session_list_file = f"{curr_path}/cache/sessions.csv"
+    session_list_file = os.path.join(CACHE_DIR, "sessions.csv")
 
     all_lists = {}
     logger.info("Loading session lists for year %s", year)
@@ -245,11 +247,11 @@ def get_main_lists(year, session):
         state_id = s.get("state_id")
         s_name = STATES[state_id - 1]
         s_year = str(s.get("year_start"))
-        s_files = [f"{curr_path}/cache/" + s_name + "-" + s_year + ".csv"]
+        s_files = [os.path.join(CACHE_DIR, f"{s_name}-{s_year}.csv")]
 
         # if this session extends more than one year we want to make sure we use it for both years
         if s.get("year_start") != s.get("year_end"):
-            s_files.append(f"{curr_path}/cache/" + s_name + "-" + str(s.get("year_end")) + ".csv")
+            s_files.append(os.path.join(CACHE_DIR, f"{s_name}-{str(s.get('year_end'))}.csv"))
 
         for s_file in s_files:
             # checks cache if stale or doesn't exist pull (we can pull new data every hour)
@@ -307,7 +309,7 @@ def queue_update(row_updates, row, column, value):
 
 def should_format_sheet(worksheet, year, headers):
     safe_name = worksheet.replace(" ", "_").replace("/", "_")
-    flag_path = os.path.join(curr_path, "cache", f"format-{safe_name}-{year}.txt")
+    flag_path = os.path.join(CACHE_DIR, f"format-{safe_name}-{year}.txt")
     header_signature = "|".join(headers)
     if not os.path.exists(flag_path):
         return True
@@ -320,7 +322,7 @@ def should_format_sheet(worksheet, year, headers):
 
 def mark_sheet_formatted(worksheet, year, headers):
     safe_name = worksheet.replace(" ", "_").replace("/", "_")
-    flag_path = os.path.join(curr_path, "cache", f"format-{safe_name}-{year}.txt")
+    flag_path = os.path.join(CACHE_DIR, f"format-{safe_name}-{year}.txt")
     header_signature = "|".join(headers)
     os.makedirs(os.path.dirname(flag_path), exist_ok=True)
     with open(flag_path, "w") as handle:
@@ -348,8 +350,8 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     gsheet = gsheet.fillna('')
 
     #gets previous sheet from file
-    if os.path.exists(f"{curr_path}/cache/gsheet-{worksheet}-{year}.csv"):
-        prev_gsheet = pd.read_csv(f"{curr_path}/cache/gsheet-{worksheet}-{year}.csv")
+    if os.path.exists(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv")):
+        prev_gsheet = pd.read_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
     else:
         prev_gsheet = gsheet
 
@@ -529,7 +531,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
-    gsheet.to_csv(f"{curr_path}/cache/gsheet-{worksheet}-{year}.csv")
+    gsheet.to_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
 
 def main():
     _set_stat("last_run_started", time.time())

@@ -5,7 +5,7 @@ A Twitter/Bsky bot and automation platform for tracking anti-LGBTQ legislation. 
 - Pulls session master lists and bill details from the LegiScan API.
 - Updates Google Sheets worksheets for anti/pro and rollover bills.
 - Posts alerts to X (Twitter) and Bluesky, and sends HTML email reports.
-- Caches session lists and sheet snapshots in `cache/` to limit API calls.
+- Caches session lists and sheet snapshots in `cache/` (or `/var/data` when `PRODUCTION=true`) to limit API calls.
 
 ## Requirements
 - Python 3
@@ -27,10 +27,11 @@ The bot reads all secrets from environment variables:
 - `bsky_user`, `bsky_pass`: Bluesky credentials.
 - `GOOGLE_TOKEN`: Gmail SMTP app password used to send email reports.
 - `LOG_LEVEL`: Logging verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is INFO.
-- `LOG_FILE`: Optional log file path (defaults to `cache/legialerts.log`).
+- `LOG_FILE`: Optional log file path (defaults to `cache/legialerts.log`, or `/var/data/legialerts.log` in production).
 - `LEGISCAN_MIN_INTERVAL`: Optional delay between LegiScan API calls in seconds.
 - `SEARCH_CACHE_TTL`: Optional cache TTL for search results in seconds (defaults to 3600).
 - `SOCIAL_ENABLED`: Set to `false` to disable posting to X/Twitter and Bluesky.
+- `PRODUCTION`: Set to `true` to store cache files under `/var/data` instead of `cache/`.
 
 Note: `legialerts.json` contains a service account example; keep real credentials out of version control.
 
@@ -60,7 +61,7 @@ curl -H "Authorization: Bearer $API_AUTH_TOKEN" http://localhost:8080/health
 ## Sheets and cache expectations
 - Worksheets expected: `Anti-LGBTQ Bills`, `Pro-LGBTQ Bills`, `Rollover Anti-LGBTQ Bills`, `Rollover Pro-LGBTQ Bills`.
 - The header row is used as the schema; the bot fills in fields like `Status`, `Date`, `Change Hash`, `Sponsors`, `History`, and `PDF`.
-- Cache files are written to `cache/`, including `sessions.csv`, per-state session lists, and `gsheet-<worksheet>-<year>.csv`.
+- Cache files are written to `cache/` (or `/var/data` in production), including `sessions.csv`, per-state session lists, and `gsheet-<worksheet>-<year>.csv`.
 
 ## Notes
 - The `years` list in `main.py` controls which tracker years are updated.

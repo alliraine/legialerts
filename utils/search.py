@@ -20,10 +20,13 @@ legi_key = os.environ.get('legiscan_key')
 u_input = ""
 
 curr_path = os.path.dirname(__file__)
+base_path = os.path.join(curr_path, "..")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LEGISCAN_MIN_INTERVAL = float(os.environ.get("LEGISCAN_MIN_INTERVAL", "0"))
 SEARCH_CACHE_TTL = int(os.environ.get("SEARCH_CACHE_TTL", "3600"))
-SEARCH_CACHE_DIR = os.path.join(curr_path, "..", "cache", "search")
+PRODUCTION = os.environ.get("PRODUCTION", "").strip().lower() in ("1", "true", "yes", "on")
+CACHE_DIR = "/var/data" if PRODUCTION else os.path.join(base_path, "cache")
+SEARCH_CACHE_DIR = os.path.join(CACHE_DIR, "search")
 _last_legiscan_call = 0.0
 
 logging.basicConfig(
@@ -166,7 +169,7 @@ expected_headers5 = wks5.row_values(1)
 prev_gsheet5 = pd.DataFrame(wks5.get_all_records(expected_headers=expected_headers5))
 
 
-ignore_list = pd.read_json("../cache/ignore_list.json")
+ignore_list = pd.read_json(os.path.join(CACHE_DIR, "ignore_list.json"))
 
 bills = []
 
