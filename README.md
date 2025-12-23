@@ -49,6 +49,13 @@ flask --app app run --host 0.0.0.0 --port 8080
 Endpoints:
 - `GET /run`: triggers one update cycle; returns 409 if a run is already in progress.
 - `GET /health`: basic health check.
+- `GET /stats`: run metrics and worksheet summary stats from cached sheets.
+
+### Authentication
+Set `API_AUTH_TOKEN` to require a bearer token for all endpoints. Example:
+```bash
+curl -H "Authorization: Bearer $API_AUTH_TOKEN" http://localhost:8080/health
+```
 
 ## Sheets and cache expectations
 - Worksheets expected: `Anti-LGBTQ Bills`, `Pro-LGBTQ Bills`, `Rollover Anti-LGBTQ Bills`, `Rollover Pro-LGBTQ Bills`.
