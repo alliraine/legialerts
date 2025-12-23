@@ -41,6 +41,15 @@ python main.py
 ```
 It can also be run under a process manager (systemd, supervisor) or a cronjob that invokes the script repeatedly.
 
+## Web endpoint (Flask)
+You can trigger a single run via a lightweight Flask app:
+```bash
+flask --app app run --host 0.0.0.0 --port 8080
+```
+Endpoints:
+- `GET /run`: triggers one update cycle; returns 409 if a run is already in progress.
+- `GET /health`: basic health check.
+
 ## Sheets and cache expectations
 - Worksheets expected: `Anti-LGBTQ Bills`, `Pro-LGBTQ Bills`, `Rollover Anti-LGBTQ Bills`, `Rollover Pro-LGBTQ Bills`.
 - The header row is used as the schema; the bot fills in fields like `Status`, `Date`, `Change Hash`, `Sponsors`, `History`, and `PDF`.
