@@ -13,3 +13,7 @@ services:
         value: "INFO"
       - key: LEGISCAN_MIN_INTERVAL
         value: "0.2"
+      - key: TRACKER_YEARS
+        value: "2026"
+      - key: API_ALLOW_ANONYMOUS
+        value: "false"

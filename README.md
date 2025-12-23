@@ -19,21 +19,24 @@ pip install -r requirements.txt
 ```
 
 ## Configuration (environment variables)
-The bot reads all secrets from environment variables:
+The bot reads all secrets from environment variables (see `.env.example` for a template):
 - `legiscan_key`: LegiScan API key.
-- `gsuite_service_account`: JSON string for the Google service account credentials.
-- `gsheet_key_2025`: Google Sheet key for the 2025 tracker (add more keys for additional years).
+- `gsuite_service_account` **or** `GSUITE_SERVICE_ACCOUNT_FILE`: Google service account credentials (JSON string or secure file path). Keep the JSON out of version control.
+- `TRACKER_YEARS`: Comma-separated list of tracker years (defaults to `2026`). Each year needs a matching `gsheet_key_<year>` value.
+- `gsheet_key_<year>`: Google Sheet key for each tracker year (e.g., `gsheet_key_2026`).
 - `twitter_consumer_key`, `twitter_consumer_secret`, `twitter_access_token`, `twitter_access_token_secret`: X/Twitter API credentials.
 - `bsky_user`, `bsky_pass`: Bluesky credentials.
 - `GOOGLE_TOKEN`: Gmail SMTP app password used to send email reports.
+- `API_AUTH_TOKEN`: Bearer token required for the Flask endpoints (set `API_ALLOW_ANONYMOUS=true` to intentionally disable auth).
 - `LOG_LEVEL`: Logging verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is INFO.
 - `LOG_FILE`: Optional log file path (defaults to `cache/legialerts.log`, or `/var/data/legialerts.log` in production).
 - `LEGISCAN_MIN_INTERVAL`: Optional delay between LegiScan API calls in seconds.
+- `REQUEST_TIMEOUT`: Request timeout in seconds for LegiScan calls (defaults to 30).
 - `SEARCH_CACHE_TTL`: Optional cache TTL for search results in seconds (defaults to 3600).
 - `SOCIAL_ENABLED`: Set to `false` to disable posting to X/Twitter and Bluesky.
 - `PRODUCTION`: Set to `true` to store cache files under `/var/data` instead of `cache/`.
 
-Note: `legialerts.json` contains a service account example; keep real credentials out of version control.
+Security note: Do not commit real tokens, service accounts, or SMTP secrets. Use environment variables or a mounted secret file instead of tracking credentials in Git.
 
 ## Running
 The bot runs continuously and sleeps ~15 minutes between cycles:
@@ -53,7 +56,7 @@ Endpoints:
 - `GET /stats`: run metrics and worksheet summary stats from cached sheets.
 
 ### Authentication
-Set `API_AUTH_TOKEN` to require a bearer token for all endpoints. Example:
+Authentication is required by default; set `API_AUTH_TOKEN` and provide the same token in requests. To deliberately allow anonymous access, set `API_ALLOW_ANONYMOUS=true`. Example:
 ```bash
 curl -H "Authorization: Bearer $API_AUTH_TOKEN" http://localhost:8080/health
 ```

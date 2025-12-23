@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -8,16 +9,17 @@ from atproto import Client as BSKYClient
 
 from utils.bsky_helper import send_skeet
 from utils.twitter_helper import send_tweet
+from utils.config import SOCIAL_ENABLED
 
 curr_path = os.path.dirname(__file__)
+logger = logging.getLogger(__name__)
 
 sender = "hello@legialerts.com"
 password = os.environ.get('GOOGLE_TOKEN')
-SOCIAL_ENABLED = os.environ.get("SOCIAL_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
 
 def notify_social(msg):
     if not SOCIAL_ENABLED:
-        print("Social notifications disabled via SOCIAL_ENABLED")
+        logger.info("Social notifications disabled via SOCIAL_ENABLED")
         return
     twitter = tweepy.Client(
         consumer_key=os.environ.get('twitter_consumer_key'),
@@ -26,12 +28,12 @@ def notify_social(msg):
         access_token_secret=os.environ.get('twitter_access_token_secret')
     )
     bsky = BSKYClient()
-    print(bsky.login(os.environ.get('bsky_user'), os.environ.get('bsky_pass')))
+    bsky.login(os.environ.get('bsky_user'), os.environ.get('bsky_pass'))
     try:
         send_tweet(msg, twitter)
         send_skeet(msg, bsky)
     except Exception as e:
-        print("Unable to send social notifications. Full error:", e)
+        logger.exception("Unable to send social notifications: %s", e)
 
 def notify_legi_team(subject, content):
     to = ["hello@legialerts.com", "allichapman22@gmail.com"]
@@ -65,7 +67,7 @@ def send_email(to, subject, content):
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
        smtp_server.login(sender, password)
        smtp_server.sendmail(sender, to, msg.as_string())
-    print("Message sent!")
+    logger.info("Email sent to %s", to)
 
 def send_history_report(report):
     html = open(f"{curr_path}/email.html", "r")

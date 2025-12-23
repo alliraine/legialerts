@@ -9,21 +9,30 @@ import threading
 import pandas as pd
 import time
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from gspread.utils import rowcol_to_a1
+
 from utils.get_sessions import get_sessions_dataframe
 from utils.notify import notify_world, notify_dev_team, notify_legi_team, send_history_report, send_new_report, \
     notify_social
 from utils.legiscan_helper import get_calendar, get_sponsors, get_history, get_texts
+from utils.config import (
+    PRODUCTION,
+    CACHE_DIR,
+    LOG_FILE,
+    LOG_LEVEL,
+    LEGISCAN_MIN_INTERVAL,
+    REQUEST_TIMEOUT,
+    get_sheet_key,
+    get_tracker_years,
+    load_service_account_credentials,
+)
 
 from dotenv import load_dotenv
 
 load_dotenv()
 curr_path = os.path.dirname(__file__)
-PRODUCTION = os.environ.get("PRODUCTION", "").strip().lower() in ("1", "true", "yes", "on")
-CACHE_DIR = "/var/data" if PRODUCTION else os.path.join(curr_path, "cache")
-
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
-LOG_FILE = os.environ.get("LOG_FILE", os.path.join(CACHE_DIR, "legialerts.log"))
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -48,7 +57,7 @@ legi_key = os.environ.get('legiscan_key')
 Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
-years = [2026]
+years = get_tracker_years((2026,))
 
 world_report = ""
 dev_report = ""
@@ -88,6 +97,19 @@ STATS = {
 }
 _stats_lock = threading.Lock()
 
+def create_legiscan_session():
+    session = create_legiscan_session()
+    retry = Retry(
+        total=5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        backoff_factor=0.5,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
 def _set_stat(key, value):
     with _stats_lock:
         STATS[key] = value
@@ -100,6 +122,28 @@ def get_stats():
     with _stats_lock:
         return dict(STATS)
 
+def _success_flag_path(worksheet, year):
+    safe_name = worksheet.replace(" ", "_").replace("/", "_")
+    return os.path.join(CACHE_DIR, f"success-{safe_name}-{year}.txt")
+
+def mark_run_failed(worksheet, year):
+    try:
+        os.remove(_success_flag_path(worksheet, year))
+    except FileNotFoundError:
+        return
+    except Exception:
+        logger.warning("Unable to clear success flag for %s %s", worksheet, year)
+
+def mark_run_success(worksheet, year):
+    try:
+        with open(_success_flag_path(worksheet, year), "w") as handle:
+            handle.write(str(time.time()))
+    except Exception:
+        logger.warning("Unable to write success flag for %s %s", worksheet, year)
+
+def was_last_run_successful(worksheet, year):
+    return os.path.exists(_success_flag_path(worksheet, year))
+
 def legiscan_get(url, session):
     global _last_legiscan_call
     if LEGISCAN_MIN_INTERVAL > 0:
@@ -109,7 +153,13 @@ def legiscan_get(url, session):
             logger.debug("Throttling LegiScan call for %.3fs", LEGISCAN_MIN_INTERVAL - elapsed)
             time.sleep(LEGISCAN_MIN_INTERVAL - elapsed)
     logger.debug("LegiScan request: %s", url)
-    response = session.get(url)
+    try:
+        response = session.get(url, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        _set_stat("last_run_status", "error")
+        logger.error("LegiScan request failed: %s", exc)
+        raise
     _last_legiscan_call = time.monotonic()
     _inc_stat("legiscan_calls")
     logger.debug("LegiScan response: %s %s", response.status_code, url)
@@ -331,6 +381,7 @@ def mark_sheet_formatted(worksheet, year, headers):
 def update_worksheet(year, worksheet, new_title, change_title, session, all_lists, rollover = False, rollover_lists = None):
     global world_report, history_report, dev_report, new_report, new_report_updates, history_report_updates, dev_report_updates
     logger.info("Starting worksheet update: %s %s", year, worksheet)
+    mark_run_failed(worksheet, year)
     if rollover and rollover_lists is not None:
         all_lists = rollover_lists
     if rollover:
@@ -338,11 +389,12 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     master_index = build_master_index(all_lists)
 
     #open google sheets api account
-    gc = gspread.service_account_from_dict(json.loads(os.environ.get('gsuite_service_account')))
+    gc = gspread.service_account_from_dict(load_service_account_credentials())
 
     #open worksheet
-    wks = gc.open_by_key(os.environ.get('gsheet_key_' + str(year))).worksheet(worksheet)
+    wks = gc.open_by_key(get_sheet_key(year)).worksheet(worksheet)
     expected_headers = wks.row_values(1)
+    header_to_col = {name: idx + 1 for idx, name in enumerate(expected_headers)}
 
     #loads worksheet into dataframe
     logger.debug("Worksheet headers: %s", expected_headers)
@@ -357,12 +409,15 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
     digest = worksheet_legiscan_digest(gsheet, master_index)
     previous_digest = load_worksheet_digest(worksheet, year)
-    if digest and previous_digest == digest and not sheet_has_missing_details(gsheet):
+    previous_success = was_last_run_successful(worksheet, year)
+    if digest and previous_success and previous_digest == digest and not sheet_has_missing_details(gsheet):
         logger.info("No LegiScan changes detected; skipping worksheet update")
+        mark_run_success(worksheet, year)
         return
 
     sheet_changed = False
     missing_states = set()
+    cell_updates = []
     for index, row in gsheet.iterrows():
         try:
             row_updates = {}
@@ -505,14 +560,24 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
         if row_updates:
             gsheet.loc[index, list(row_updates.keys())] = list(row_updates.values())
             sheet_changed = True
+            for col_name, value in row_updates.items():
+                cell_updates.append((index + 2, col_name, value))
     if missing_states:
         logger.warning("Missing state sessions for: %s", ", ".join(sorted(missing_states)))
     gsheet = gsheet.fillna('Unknown')
 
     #updates the entire google sheet from data frame
     if sheet_changed:
-        logger.info("Updating worksheet data for %s %s", year, worksheet)
-        wks.update([gsheet.columns.values.tolist()] + gsheet.values.tolist(), value_input_option='USER_ENTERED')
+        logger.info("Updating worksheet data for %s %s (%d cells)", year, worksheet, len(cell_updates))
+        batch_data = []
+        for row_num, col_name, value in cell_updates:
+            col_idx = header_to_col.get(col_name)
+            if col_idx is None:
+                continue
+            cell_ref = rowcol_to_a1(row_num, col_idx)
+            batch_data.append({"range": cell_ref, "values": [[value]]})
+        if batch_data:
+            wks.batch_update(batch_data, value_input_option='USER_ENTERED')
     if digest:
         save_worksheet_digest(worksheet, year, digest)
 
@@ -532,6 +597,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     expected_headers = wks.row_values(1)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
     gsheet.to_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
+    mark_run_success(worksheet, year)
 
 def main():
     _set_stat("last_run_started", time.time())

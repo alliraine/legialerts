@@ -10,3 +10,4 @@ py-cord
 mailersend
 atproto
 flask
+pytest

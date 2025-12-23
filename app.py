@@ -6,6 +6,7 @@ import threading
 from flask import Flask, jsonify, request
 
 import main as legi_main
+from utils.config import ALLOW_ANONYMOUS_API
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -20,13 +21,15 @@ WORKSHEETS = [
 
 
 def _is_authorized():
-    if not AUTH_TOKEN:
-        return True
     provided = request.headers.get("Authorization", "")
+    if not AUTH_TOKEN:
+        return ALLOW_ANONYMOUS_API
     return provided == f"Bearer {AUTH_TOKEN}"
 
 
-def _auth_required():
+def _auth_required(allow_health=False):
+    if allow_health:
+        return None
     if _is_authorized():
         return None
     return jsonify({"status": "unauthorized"}), 401
@@ -78,7 +81,7 @@ def run_once():
 
 @app.get("/health")
 def health():
-    auth = _auth_required()
+    auth = _auth_required(allow_health=True)
     if auth:
         return auth
     return jsonify({"status": "ok"}), 200

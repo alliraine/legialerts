@@ -1,30 +1,27 @@
-import json
-import os.path
 import logging
+import os.path
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
 
+from utils.config import CACHE_DIR, REQUEST_TIMEOUT
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
-curr_path = os.path.dirname(__file__)
-base_path = os.path.join(curr_path, "..")
-PRODUCTION = os.environ.get("PRODUCTION", "").strip().lower() in ("1", "true", "yes", "on")
-CACHE_DIR = "/var/data" if PRODUCTION else os.path.join(base_path, "cache")
 legi_key = os.environ.get('legiscan_key')
 Session_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSessionList"
 logger = logging.getLogger(__name__)
 
 def get_sessions_dataframe(session=None, request_fn=None):
-    session = session or requests
+    session = session or requests.Session()
     if request_fn is None:
-        request_fn = session.get
+        request_fn = lambda url: session.get(url, timeout=REQUEST_TIMEOUT)
     r = request_fn(Session_List_URL)
     try:
         data = r.json()
     except Exception:
         logger.exception("Failed to parse LegiScan session list JSON")
-        logger.error("Session list response text: %s", r.text)
+        logger.error("Session list response text: %s", getattr(r, "text", ""))
         return pd.DataFrame()
     status = data.get("status")
     if status and status != "OK":
