@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: legialerts
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: flask --app app run --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PRODUCTION
+        value: "true"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: LEGISCAN_MIN_INTERVAL
+        value: "0.2"
