@@ -3,6 +3,7 @@ import requests
 import gspread
 import json
 import hashlib
+import logging
 
 import pandas as pd
 import time
@@ -15,6 +16,21 @@ from utils.legiscan_helper import get_calendar, get_sponsors, get_history, get_t
 from dotenv import load_dotenv
 
 load_dotenv()
+curr_path = os.path.dirname(__file__)
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_FILE = os.environ.get("LOG_FILE", os.path.join(curr_path, "cache", "legialerts.log"))
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 #ordered list based on legiscan state id
 STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida",
@@ -25,13 +41,11 @@ STATES = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", 
           "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
           "Wisconsin", "Wyoming", "DC", "US"]
 
-curr_path = os.path.dirname(__file__)
-
 legi_key = os.environ.get('legiscan_key')
-Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterListRaw&id="
+Master_List_URL = f"https://api.legiscan.com/?key={legi_key}&op=getMasterList&id="
 Bill_URL = f"https://api.legiscan.com/?key={legi_key}&op=getBill&id="
 
-years = [2025]
+years = [2026]
 
 world_report = ""
 dev_report = ""
@@ -54,6 +68,8 @@ new_report = """
 dev_report_updates, new_report_updates, history_report_updates = 0, 0, 0
 BILL_CACHE_DIR = os.path.join(curr_path, "cache", "bills")
 LEGISCAN_MIN_INTERVAL = float(os.environ.get("LEGISCAN_MIN_INTERVAL", "0"))
+SESSION_LIST_REFRESH_SECONDS = 24 * 60 * 60
+MASTER_LIST_REFRESH_SECONDS = 60 * 60
 _last_legiscan_call = 0.0
 
 def legiscan_get(url, session):
@@ -62,21 +78,42 @@ def legiscan_get(url, session):
         now = time.monotonic()
         elapsed = now - _last_legiscan_call
         if elapsed < LEGISCAN_MIN_INTERVAL:
+            logger.debug("Throttling LegiScan call for %.3fs", LEGISCAN_MIN_INTERVAL - elapsed)
             time.sleep(LEGISCAN_MIN_INTERVAL - elapsed)
+    logger.debug("LegiScan request: %s", url)
     response = session.get(url)
     _last_legiscan_call = time.monotonic()
+    logger.debug("LegiScan response: %s %s", response.status_code, url)
     return response
+
+def parse_legiscan_json(response, context):
+    try:
+        data = response.json()
+    except Exception:
+        logger.exception("Failed to parse LegiScan JSON for %s", context)
+        logger.error("LegiScan response text: %s", response.text)
+        return None
+    status = data.get("status")
+    if status and status != "OK":
+        alert = data.get("alert", {})
+        logger.error("LegiScan error for %s: %s", context, alert.get("message", data))
+        return None
+    return data
 
 def load_bill_cache(bill_id, expected_change_hash):
     cache_path = os.path.join(BILL_CACHE_DIR, f"{bill_id}.json")
     if not os.path.exists(cache_path):
+        logger.debug("Bill cache miss: %s", bill_id)
         return None
     try:
         with open(cache_path, "r") as handle:
             cached = json.load(handle)
         if cached.get("change_hash") == expected_change_hash:
+            logger.debug("Bill cache hit: %s", bill_id)
             return cached.get("bill")
+        logger.debug("Bill cache stale: %s", bill_id)
     except Exception:
+        logger.exception("Bill cache read failed: %s", bill_id)
         return None
     return None
 
@@ -85,13 +122,19 @@ def save_bill_cache(bill_id, change_hash, bill):
     cache_path = os.path.join(BILL_CACHE_DIR, f"{bill_id}.json")
     with open(cache_path, "w") as handle:
         json.dump({"change_hash": change_hash, "bill": bill}, handle)
+    logger.debug("Bill cache updated: %s", bill_id)
 
 def get_bill_details(bill_id, change_hash, session):
     cached = load_bill_cache(bill_id, change_hash)
     if cached is not None:
         return cached
+    logger.info("Fetching bill details: %s", bill_id)
     r = legiscan_get(Bill_URL + str(bill_id), session)
-    content = r.json()["bill"]
+    data = parse_legiscan_json(r, f"getBill bill_id={bill_id}")
+    if not data or "bill" not in data:
+        logger.error("Missing bill payload for bill_id=%s", bill_id)
+        return None
+    content = data["bill"]
     save_bill_cache(bill_id, change_hash, content)
     return content
 
@@ -108,6 +151,7 @@ def row_missing_details(row):
 def sheet_has_missing_details(gsheet):
     for _, row in gsheet.iterrows():
         if row_missing_details(row):
+            logger.debug("Missing details detected in sheet")
             return True
     return False
 
@@ -149,13 +193,19 @@ def get_main_lists(year, session):
     session_list_file = f"{curr_path}/cache/sessions.csv"
 
     all_lists = {}
+    logger.info("Loading session lists for year %s", year)
 
     # pull new session list every 24 hours
-    if (not os.path.exists(session_list_file)) or (os.path.getmtime(session_list_file)) <= time.time() - 1 * 60 * 60 * 24:
+    if (not os.path.exists(session_list_file)) or (os.path.getmtime(session_list_file)) <= time.time() - SESSION_LIST_REFRESH_SECONDS:
+        logger.info("Session list cache stale or missing; fetching from LegiScan")
         df = get_sessions_dataframe(session=session, request_fn=lambda url: legiscan_get(url, session))
     else:
-        print("Loading sessions_list from Cache")
+        logger.info("Loading sessions_list from cache")
         df = pd.read_csv(session_list_file)
+
+    if df.empty or not all(col in df.columns for col in ["year_start", "year_end", "special", "session_id", "state_id"]):
+        logger.error("Session list is empty or missing required columns; skipping master list load")
+        return {}
 
     SESSIONS = df.loc[((df['year_start'] == year) | (df['year_end'] == year)) & (df['special'] == 0)]
 
@@ -173,12 +223,17 @@ def get_main_lists(year, session):
 
         for s_file in s_files:
             # checks cache if stale or doesn't exist pull (we can pull new data every hour)
-            if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - 3 * 60 * 60:
-                print("Cache doesn't exist or is stale. Pulling from Legiscan")
+            if (not os.path.exists(s_file)) or (os.path.getmtime(s_file)) <= time.time() - MASTER_LIST_REFRESH_SECONDS:
+                logger.info("Session master list cache stale; fetching %s %s", s_name, s_year)
                 # Pull session master list from Legiscan
                 r = legiscan_get(Master_List_URL + str(s_id), session)
-                print(Master_List_URL + str(s_id))
-                content = r.json()["masterlist"]
+                logger.debug("Master list url: %s", Master_List_URL + str(s_id))
+                data = parse_legiscan_json(r, f"getMasterListRaw session_id={s_id}")
+                if not data or "masterlist" not in data:
+                    logger.error("Missing master list for session_id=%s", s_id)
+                    all_lists[s_name] = pd.DataFrame()
+                    continue
+                content = data["masterlist"]
                 temp_list = []
                 for attribute, value in content.items():
                     if attribute != "session":
@@ -188,7 +243,7 @@ def get_main_lists(year, session):
                 # save to csv
                 all_lists[s_name].to_csv(s_file)
             else:
-                print("Loading from Cache")
+                logger.info("Loading master list from cache: %s", s_file)
                 all_lists[s_name] = pd.read_csv(s_file)
 
     return all_lists
@@ -214,6 +269,8 @@ def build_master_index(all_lists):
 def queue_update(row_updates, row, column, value):
     current = row.get(column)
     if pd.isna(current):
+        current = ""
+    if isinstance(current, str) and current.strip().lower() == "unknown":
         current = ""
     if current != value:
         row_updates[column] = value
@@ -241,7 +298,7 @@ def mark_sheet_formatted(worksheet, year, headers):
 
 def update_worksheet(year, worksheet, new_title, change_title, session, all_lists, rollover = False, rollover_lists = None):
     global world_report, history_report, dev_report, new_report, new_report_updates, history_report_updates, dev_report_updates
-    print(f"starting {year} {worksheet}")
+    logger.info("Starting worksheet update: %s %s", year, worksheet)
     if rollover and rollover_lists is not None:
         all_lists = rollover_lists
     if rollover:
@@ -256,7 +313,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     expected_headers = wks.row_values(1)
 
     #loads worksheet into dataframe
-    print(expected_headers)
+    logger.debug("Worksheet headers: %s", expected_headers)
     gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
     gsheet = gsheet.fillna('')
 
@@ -269,10 +326,11 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     digest = worksheet_legiscan_digest(gsheet, master_index)
     previous_digest = load_worksheet_digest(worksheet, year)
     if digest and previous_digest == digest and not sheet_has_missing_details(gsheet):
-        print("No LegiScan changes detected; skipping worksheet update")
+        logger.info("No LegiScan changes detected; skipping worksheet update")
         return
 
     sheet_changed = False
+    missing_states = set()
     for index, row in gsheet.iterrows():
         try:
             row_updates = {}
@@ -281,7 +339,11 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             r_btype = row["Bill Type"]
             queue_update(row_updates, row, 'Youth State Risk', f"=VLOOKUP(A{index+2},'Risk Levels'!$A$4:$E$55,2)")
             queue_update(row_updates, row, 'Adult State Risk', f"=VLOOKUP(A{index+2},'Risk Levels'!$A$4:$E$55,3)")
-            if not all_lists[r_state].empty:
+            state_list = all_lists.get(r_state)
+            if state_list is None:
+                missing_states.add(r_state)
+                continue
+            if not state_list.empty:
                 lscan_row = master_index.get(r_state, {}).get(r_bnum.strip())
                 if lscan_row is not None:
                     r_la = lscan_row["last_action"]
@@ -289,10 +351,13 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     r_link = lscan_row["url"]
                     bill_id = lscan_row["bill_id"]
                     change_hash = lscan_row["change_hash"]
+                    last_action_date = lscan_row["last_action_date"]
                     prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
+                    bill_details = None
 
                     #checks if the bill is recently added. If not then alert new bill
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
+                        logger.info("New bill detected: %s %s", r_state, r_bnum.strip())
                         t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link} "
                         notify_social(t)
                         new_report_updates += 1
@@ -306,6 +371,9 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                                                     """
 
                         content = get_bill_details(bill_id, change_hash, session)
+                        if content is None:
+                            continue
+                        bill_details = content
 
                         sponsors_value = get_sponsors(content["sponsors"])
                         calendar_value = get_calendar(content["calendar"])
@@ -320,10 +388,13 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
                     #if not new check change hash to see if the bill has changed. If it has trigger an alert
                     elif lscan_row["change_hash"] != row["Change Hash"] and (lscan_row["last_action"] != row["Status"] or lscan_row["last_action_date"] != row["Date"]):
-                        print("Bill Change Found")
+                        logger.info("Bill change found: %s %s", r_state, r_bnum.strip())
                         t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link}"
                         notify_social(t)
                         content = get_bill_details(bill_id, change_hash, session)
+                        if content is None:
+                            continue
+                        bill_details = content
 
                         sponsors_value = get_sponsors(content["sponsors"])
                         calendar_value = get_calendar(content["calendar"])
@@ -344,7 +415,11 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                         queue_update(row_updates, row, 'Bill ID', str(bill_id))
                         queue_update(row_updates, row, 'PDF', texts_value)
                     elif row_missing_details(row):
+                        logger.debug("Backfilling missing details for %s %s", r_state, r_bnum.strip())
                         content = get_bill_details(bill_id, change_hash, session)
+                        if content is None:
+                            continue
+                        bill_details = content
                         sponsors_value = get_sponsors(content["sponsors"])
                         calendar_value = get_calendar(content["calendar"])
                         history_value = get_history(content["history"])
@@ -355,38 +430,60 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                         queue_update(row_updates, row, 'Bill ID', str(bill_id))
                         queue_update(row_updates, row, 'PDF', texts_value)
 
+                    if (not r_title) or (not r_la) or (not last_action_date) or (not r_link):
+                        if bill_details is None:
+                            bill_details = get_bill_details(bill_id, change_hash, session)
+                        if bill_details is None:
+                            logger.error("Bill details unavailable for %s %s", r_state, r_bnum.strip())
+                            continue
+                        if not r_title:
+                            r_title = bill_details.get("title") or r_title
+                        if not r_la:
+                            r_la = bill_details.get("last_action") or r_la
+                        if not last_action_date:
+                            last_action_date = bill_details.get("last_action_date") or bill_details.get("status_date")
+                        if not r_link:
+                            r_link = bill_details.get("url") or r_link
+
                     hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
                     queue_update(row_updates, row, 'Number', hyperlink)
-                    queue_update(row_updates, row, 'Status', lscan_row["last_action"])
-                    if lscan_row["last_action_date"] != None and lscan_row["last_action_date"] != '':
-                        queue_update(row_updates, row, 'Date', lscan_row["last_action_date"])
+                    queue_update(row_updates, row, 'Status', r_la)
+                    if last_action_date != None and last_action_date != '':
+                        queue_update(row_updates, row, 'Date', last_action_date)
                     else:
                         queue_update(row_updates, row, 'Date', "Unknown")
-                    queue_update(row_updates, row, 'Summary', lscan_row["title"])
+                    queue_update(row_updates, row, 'Summary', r_title)
                     queue_update(row_updates, row, 'Change Hash', lscan_row["change_hash"])
-                    queue_update(row_updates, row, 'URL', f"=HYPERLINK(\"{r_link}\",\"{r_link}\")")
+                    if r_link:
+                        queue_update(row_updates, row, 'URL', f"=HYPERLINK(\"{r_link}\",\"{r_link}\")")
+                    else:
+                        queue_update(row_updates, row, 'URL', "Unknown")
                 else:
                     queue_update(row_updates, row, 'Date', "Unknown")
             else:
                 queue_update(row_updates, row, 'Date', "Unknown")
 
         except Exception as e:
-            print("Ran into error", e)
+            logger.exception("Row processing error: %s", e)
             dev_report_updates += 1
             dev_report = dev_report + "\n" + str(e.args[0])
         if row_updates:
             gsheet.loc[index, list(row_updates.keys())] = list(row_updates.values())
             sheet_changed = True
+    if missing_states:
+        logger.warning("Missing state sessions for: %s", ", ".join(sorted(missing_states)))
     gsheet = gsheet.fillna('Unknown')
 
     #updates the entire google sheet from data frame
     if sheet_changed:
+        logger.info("Updating worksheet data for %s %s", year, worksheet)
         wks.update([gsheet.columns.values.tolist()] + gsheet.values.tolist(), value_input_option='USER_ENTERED')
     if digest:
         save_worksheet_digest(worksheet, year, digest)
 
     #formats google sheet when headers change or first run
     if should_format_sheet(worksheet, year, expected_headers):
+        logger.info("Formatting worksheet: %s", worksheet)
         wks.format("A2:K400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend"}})
         wks.format("G2:G400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "horizontalAlignment": "CENTER"})
         wks.format("E2:E400", {'textFormat': {"fontSize": 12, "fontFamily": "Lexend", }, "numberFormat": {"type": "DATE"}, "horizontalAlignment": "CENTER"})
@@ -411,17 +508,13 @@ def main():
         update_worksheet(year, "Rollover Anti-LGBTQ Bills", "🚨ALERT ROLLOVER BILL 🚨", "🏛 Status Change 🏛", session, all_lists, rollover=True, rollover_lists=rollover_lists)
         update_worksheet(year, "Rollover Pro-LGBTQ Bills", "🌈ROLLOVER GOOD BILL 🏳️", "🏛 Status Change 🏛", session, all_lists, rollover=True, rollover_lists=rollover_lists)
 
-    if dev_report_updates > 0:
-        notify_dev_team("Error occured with latest bot run!", dev_report)
-    # notify_world("Latest Changes", world_report)
-    if history_report_updates > 0:
-        send_history_report(history_report)
-    if new_report_updates > 0:
-        send_new_report(new_report)
+    # if dev_report_updates > 0:
+    #     notify_dev_team("Error occured with latest bot run!", dev_report)
+    # # notify_world("Latest Changes", world_report)
+    # if history_report_updates > 0:
+    #     send_history_report(history_report)
+    # if new_report_updates > 0:
+    #     send_new_report(new_report)
 
 if __name__ == "__main__":
-    while True:
-        print("running")
         main()
-        print("sleeping")
-        time.sleep(899)

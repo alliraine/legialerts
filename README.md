@@ -26,6 +26,11 @@ The bot reads all secrets from environment variables:
 - `twitter_consumer_key`, `twitter_consumer_secret`, `twitter_access_token`, `twitter_access_token_secret`: X/Twitter API credentials.
 - `bsky_user`, `bsky_pass`: Bluesky credentials.
 - `GOOGLE_TOKEN`: Gmail SMTP app password used to send email reports.
+- `LOG_LEVEL`: Logging verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is INFO.
+- `LOG_FILE`: Optional log file path (defaults to `cache/legialerts.log`).
+- `LEGISCAN_MIN_INTERVAL`: Optional delay between LegiScan API calls in seconds.
+- `SEARCH_CACHE_TTL`: Optional cache TTL for search results in seconds (defaults to 3600).
+- `SOCIAL_ENABLED`: Set to `false` to disable posting to X/Twitter and Bluesky.
 
 Note: `legialerts.json` contains a service account example; keep real credentials out of version control.
 
@@ -44,6 +49,9 @@ It can also be run under a process manager (systemd, supervisor) or a cronjob th
 ## Notes
 - The `years` list in `main.py` controls which tracker years are updated.
 - Email templates live in `utils/email.html`.
+
+## Attribution
+LegiAlerts uses data from LegiScan. All data is licensed under Creative Commons Attribution 4.0; attribution to LegiScan is required.
 
 
 # Credits

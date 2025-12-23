@@ -13,8 +13,12 @@ curr_path = os.path.dirname(__file__)
 
 sender = "hello@legialerts.com"
 password = os.environ.get('GOOGLE_TOKEN')
+SOCIAL_ENABLED = os.environ.get("SOCIAL_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
 
 def notify_social(msg):
+    if not SOCIAL_ENABLED:
+        print("Social notifications disabled via SOCIAL_ENABLED")
+        return
     twitter = tweepy.Client(
         consumer_key=os.environ.get('twitter_consumer_key'),
         consumer_secret=os.environ.get('twitter_consumer_secret'),

@@ -2,6 +2,9 @@ import json
 import os.path
 import pickle
 from datetime import datetime
+import hashlib
+import logging
+import time
 
 import gspread
 import requests
@@ -11,12 +14,23 @@ from dotenv import load_dotenv
 
 from us_state_abbrv import abbrev_to_us_state
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 legi_key = os.environ.get('legiscan_key')
 u_input = ""
 
 curr_path = os.path.dirname(__file__)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LEGISCAN_MIN_INTERVAL = float(os.environ.get("LEGISCAN_MIN_INTERVAL", "0"))
+SEARCH_CACHE_TTL = int(os.environ.get("SEARCH_CACHE_TTL", "3600"))
+SEARCH_CACHE_DIR = os.path.join(curr_path, "..", "cache", "search")
+_last_legiscan_call = 0.0
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 class color:
@@ -34,9 +48,25 @@ class color:
 
 def search(term, page):
     global ignore_list
-    Search_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSearch&state=ALL&page={page}&query="
-    r = requests.get(Search_URL + str(term))
-    content = r.json()["searchresult"]
+    Search_URL = f"https://api.legiscan.com/?key={legi_key}&op=getSearchRaw&state=ALL&page={page}&query="
+    cache_key = hashlib.sha256(f"{term}|{page}".encode("utf-8")).hexdigest()
+    cache_path = os.path.join(SEARCH_CACHE_DIR, f"{cache_key}.json")
+    os.makedirs(SEARCH_CACHE_DIR, exist_ok=True)
+
+    if os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < SEARCH_CACHE_TTL:
+        with open(cache_path, "r") as handle:
+            data = json.load(handle)
+    else:
+        data = legiscan_fetch(Search_URL + str(term))
+        if data is None:
+            return []
+        with open(cache_path, "w") as handle:
+            json.dump(data, handle)
+
+    content = data.get("searchresult")
+    if content is None:
+        logger.error("LegiScan search missing searchresult for term=%s page=%s", term, page)
+        return []
     bills = []
     for e in content:
         if e != "summary":
@@ -74,6 +104,27 @@ def search(term, page):
     if content["summary"]["page_total"] > page:
         bills.extend(search(term, page + 1))
     return bills
+
+def legiscan_fetch(url):
+    global _last_legiscan_call
+    if LEGISCAN_MIN_INTERVAL > 0:
+        now = time.monotonic()
+        elapsed = now - _last_legiscan_call
+        if elapsed < LEGISCAN_MIN_INTERVAL:
+            time.sleep(LEGISCAN_MIN_INTERVAL - elapsed)
+    r = requests.get(url)
+    _last_legiscan_call = time.monotonic()
+    try:
+        data = r.json()
+    except Exception:
+        logger.exception("Failed to parse LegiScan JSON")
+        logger.error("Response text: %s", r.text)
+        return None
+    status = data.get("status")
+    if status and status != "OK":
+        logger.error("LegiScan error: %s", data.get("alert", {}).get("message", data))
+        return None
+    return data
 
 
 # open google sheets api account

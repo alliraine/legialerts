@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from us_state_abbrv import abbrev_to_us_state
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 legi_key = os.environ.get('legiscan_key')
 u_input = ""

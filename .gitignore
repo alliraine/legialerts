@@ -1,4 +1,5 @@
-/cache/*.csv
+/cache/*
+/cache/bills/*
 .env
 legialerts.json
 .idea
