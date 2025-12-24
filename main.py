@@ -5,6 +5,7 @@ import json
 import hashlib
 import logging
 import threading
+import math
 
 import pandas as pd
 import time
@@ -224,6 +225,11 @@ def row_missing_details(row):
     required_fields = ["Sponsors", "Calendar", "History", "PDF", "Bill ID"]
     for field in required_fields:
         value = row.get(field)
+        try:
+            if pd.isna(value):
+                return True
+        except TypeError:
+            pass
         if value is None:
             return True
         if isinstance(value, str) and value.strip() in ("", "Unknown"):
@@ -348,7 +354,24 @@ def build_master_index(all_lists):
         master_index[state_name] = state_index
     return master_index
 
+def clean_cell_value(value):
+    try:
+        if pd.isna(value):
+            return ""
+    except TypeError:
+        # pd.isna can raise on unhashable types; leave value as-is in that case
+        pass
+    if isinstance(value, float) and not math.isfinite(value):
+        return ""
+    if hasattr(value, "item"):
+        try:
+            value = value.item()
+        except Exception:
+            pass
+    return value
+
 def queue_update(row_updates, row, column, value):
+    value = clean_cell_value(value)
     current = row.get(column)
     if pd.isna(current):
         current = ""
@@ -398,14 +421,19 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
     #loads worksheet into dataframe
     logger.debug("Worksheet headers: %s", expected_headers)
-    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
+    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers)).astype(object)
     gsheet = gsheet.fillna('')
 
     #gets previous sheet from file
     if os.path.exists(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv")):
-        prev_gsheet = pd.read_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
+        prev_gsheet = pd.read_csv(
+            os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"),
+            dtype=object,
+            keep_default_na=False,
+        ).astype(object)
+        prev_gsheet = prev_gsheet.fillna('')
     else:
-        prev_gsheet = gsheet
+        prev_gsheet = gsheet.copy()
 
     digest = worksheet_legiscan_digest(gsheet, master_index)
     previous_digest = load_worksheet_digest(worksheet, year)
@@ -575,7 +603,8 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             if col_idx is None:
                 continue
             cell_ref = rowcol_to_a1(row_num, col_idx)
-            batch_data.append({"range": cell_ref, "values": [[value]]})
+            safe_value = clean_cell_value(value)
+            batch_data.append({"range": cell_ref, "values": [[safe_value]]})
         if batch_data:
             wks.batch_update(batch_data, value_input_option='USER_ENTERED')
     if digest:
@@ -595,7 +624,8 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
-    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
+    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers)).astype(object)
+    gsheet = gsheet.fillna('')
     gsheet.to_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
     mark_run_success(worksheet, year)
 
