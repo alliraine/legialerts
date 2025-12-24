@@ -39,7 +39,6 @@ def _sheet_stats(path):
     stats = {
         "total_rows": 0,
         "by_state": {},
-        "by_status": {},
         "unknown_status": 0,
         "missing_url": 0,
     }
@@ -56,8 +55,6 @@ def _sheet_stats(path):
             status = (row.get("Status") or "").strip()
             if not status or status.lower() == "unknown":
                 stats["unknown_status"] += 1
-            else:
-                stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
             url = (row.get("URL") or "").strip()
             if not url or url.lower() == "unknown":
                 stats["missing_url"] += 1
