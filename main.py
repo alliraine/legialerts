@@ -110,14 +110,13 @@ TRACKED_FIELDS = [
     "Status",
     "Date",
     "Summary",
+    "Bill Type",
     "Sponsors",
     "Calendar",
     "History",
     "URL",
     "Bill ID",
     "PDF",
-    "Youth State Risk",
-    "Adult State Risk",
 ]
 
 def create_legiscan_session():
@@ -454,7 +453,7 @@ def get_meaningful_changes(row_updates, prev_row):
             })
     return changes
 
-def build_change_entry(change_type, worksheet, year, state, bill_number, title, status, url, changed_fields):
+def build_change_entry(change_type, worksheet, year, state, bill_number, title, status, bill_type, url, changed_fields):
     base_payload = {
         "change_type": change_type,
         "worksheet": worksheet,
@@ -463,6 +462,7 @@ def build_change_entry(change_type, worksheet, year, state, bill_number, title, 
         "bill_number": bill_number,
         "title": title,
         "status": status,
+        "bill_type": bill_type,
         "url": url,
         "changed_fields": changed_fields,
         "created_at": time.time(),
@@ -473,18 +473,36 @@ def build_change_entry(change_type, worksheet, year, state, bill_number, title, 
     return base_payload
 
 def format_change_message(change):
-    heading = "New bill" if change.get("change_type") == "new" else "Bill update"
-    lines = [
-        f"{heading}: {change.get('state')} {change.get('bill_number')}",
-    ]
-    if change.get("title"):
-        lines.append(f"Title: {change['title']}")
-    if change.get("status"):
-        lines.append(f"Status: {change['status']}")
+    change_type = change.get("change_type")
+    heading = "🚨 ALERT NEW BILL 🚨" if change_type == "new" else "🏛 Status Change 🏛"
+    lines = [heading]
+    if change_type == "new":
+        lines.append("------------------------")
+    bill = f"{change.get('state')} {change.get('bill_number')}"
+    title = change.get("title") or "Unknown"
+    status = change.get("status") or "Unknown"
+    bill_type = change.get("bill_type") or "Unknown"
+    lines.append(f"🏛 Bill: {bill}")
+    lines.append(f"📄 Title: {title}")
+    lines.append(f"🏷️ Bill Type: {bill_type}")
+    lines.append(f"🏛 Status: {status}")
+
+    def _is_formula(value: str) -> bool:
+        return isinstance(value, str) and (value.strip().startswith("=") or "VLOOKUP" in value or "HYPERLINK" in value)
+
+    display_changes = []
     for f in change.get("changed_fields", []):
-        lines.append(f"{f.get('field')}: {f.get('old', '')} -> {f.get('new', '')}")
+        old = f.get("old", "")
+        new = f.get("new", "")
+        if _is_formula(old) or _is_formula(new):
+            continue
+        display_changes.append(f"- {f.get('field')}: {old} -> {new}")
+    if display_changes:
+        lines.append("🔄 Changes:")
+        lines.extend(display_changes)
+
     if change.get("url"):
-        lines.append(f"Link: {change['url']}")
+        lines.append(f"🔗 Bill Text: {change['url']}")
     return "\n".join(lines)
 
 def dispatch_change_queue(base_url=None):
@@ -712,6 +730,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     r_bnum.strip(),
                     r_title,
                     r_la,
+                    r_btype,
                     r_link,
                     meaningful_changes,
                 )

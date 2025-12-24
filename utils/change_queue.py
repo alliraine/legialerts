@@ -88,6 +88,8 @@ def build_rss_feed(changes: List[Dict[str, Any]], base_url: Optional[str] = None
             description_lines.append(change["title"])
         if change.get("status"):
             description_lines.append(f"Status: {change['status']}")
+        if change.get("bill_type"):
+            description_lines.append(f"Bill Type: {change['bill_type']}")
         for f in change.get("changed_fields", []):
             description_lines.append(f"{f.get('field')}: {f.get('old', '')} -> {f.get('new', '')}")
         description = "\n".join(description_lines)
@@ -133,4 +135,3 @@ def _escape_xml(text: Any) -> str:
         .replace("\"", "&quot;")
         .replace("'", "&apos;")
     )
-
