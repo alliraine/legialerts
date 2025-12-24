@@ -7,6 +7,7 @@ import logging
 import threading
 import math
 import uuid
+import re
 
 import pandas as pd
 import time
@@ -316,19 +317,24 @@ def get_main_lists(year, session):
         logger.error("Session list is empty or missing required columns; skipping master list load")
         return {}
 
-    SESSIONS = df.loc[((df['year_start'] == year) | (df['year_end'] == year)) & (df['special'] == 0)]
+    SESSIONS = df.loc[((df['year_start'] == year) | (df['year_end'] == year))]
 
     for idx, s in SESSIONS.iterrows():
         # set helpful vars
         s_id = s.get("session_id")
         state_id = s.get("state_id")
+        if pd.isna(s_id) or pd.isna(state_id):
+            logger.warning("Skipping session with missing ids: %s", s.to_dict())
+            continue
+        s_id = int(s_id)
+        state_id = int(state_id)
         s_name = STATES[state_id - 1]
         s_year = str(s.get("year_start"))
-        s_files = [os.path.join(CACHE_DIR, f"{s_name}-{s_year}.csv")]
+        s_files = [os.path.join(CACHE_DIR, f"{s_name}-{s_year}-session-{s_id}.csv")]
 
         # if this session extends more than one year we want to make sure we use it for both years
         if s.get("year_start") != s.get("year_end"):
-            s_files.append(os.path.join(CACHE_DIR, f"{s_name}-{str(s.get('year_end'))}.csv"))
+            s_files.append(os.path.join(CACHE_DIR, f"{s_name}-{str(s.get('year_end'))}-session-{s_id}.csv"))
 
         for s_file in s_files:
             # checks cache if stale or doesn't exist pull (we can pull new data every hour)
@@ -347,13 +353,22 @@ def get_main_lists(year, session):
                 for attribute, value in content.items():
                     if attribute != "session":
                         temp_list.append(value)
-                all_lists[s_name] = pd.DataFrame(temp_list)
+                session_df = pd.DataFrame(temp_list)
 
                 # save to csv
-                all_lists[s_name].to_csv(s_file)
+                session_df.to_csv(s_file)
             else:
                 logger.info("Loading master list from cache: %s", s_file)
-                all_lists[s_name] = pd.read_csv(s_file)
+                session_df = pd.read_csv(s_file)
+
+            existing = all_lists.get(s_name, pd.DataFrame())
+            if existing.empty:
+                all_lists[s_name] = session_df
+            else:
+                combined = pd.concat([existing, session_df], ignore_index=True)
+                if "bill_id" in combined.columns:
+                    combined = combined.drop_duplicates(subset="bill_id", keep="last")
+                all_lists[s_name] = combined
 
     return all_lists
 
@@ -369,9 +384,15 @@ def build_master_index(all_lists):
             continue
         state_index = {}
         for _, row in df.iterrows():
-            number = str(row.get("number", "")).strip()
-            if number:
-                state_index[number] = {field: row.get(field) for field in fields}
+            number_raw = str(row.get("number", "")).strip()
+            number_norm = normalize_bill_number(number_raw)
+            if number_norm:
+                entry = {field: row.get(field) for field in fields}
+                entry["raw_number"] = number_raw
+                state_index[number_norm] = entry
+                base_number = strip_session_prefix(number_norm)
+                if base_number != number_norm:
+                    state_index.setdefault(base_number, entry)
         master_index[state_name] = state_index
     return master_index
 
@@ -400,6 +421,25 @@ def normalize_for_compare(value):
     if value is None:
         return ""
     return str(value)
+
+def extract_display_number(value):
+    if not isinstance(value, str):
+        return str(value)
+    value = value.strip()
+    hyperlink_match = re.match(r'=HYPERLINK\(".*?","(.*)"\)', value)
+    if hyperlink_match:
+        return hyperlink_match.group(1)
+    return value
+
+def normalize_bill_number(value):
+    display = extract_display_number(value)
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", str(display)).upper()
+    return cleaned
+
+def strip_session_prefix(normalized_number):
+    if not normalized_number:
+        return ""
+    return re.sub("^X\\d+", "", normalized_number)
 
 def fill_missing(df, value=""):
     df = df.astype(object, copy=False)
@@ -577,7 +617,9 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
         try:
             row_updates = {}
             r_state = row["State"].strip()
-            r_bnum = row["Number"]
+            r_bnum_raw = row["Number"]
+            r_bnum_display = extract_display_number(r_bnum_raw)
+            r_bnum_norm = normalize_bill_number(r_bnum_display)
             r_btype = row["Bill Type"]
             change_kind = None
             prev_row_series = None
@@ -589,7 +631,9 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                 missing_states.add(r_state)
                 continue
             if not state_list.empty:
-                lscan_row = master_index.get(r_state, {}).get(r_bnum.strip())
+                lscan_row = master_index.get(r_state, {}).get(r_bnum_norm)
+                if lscan_row is None:
+                    lscan_row = master_index.get(r_state, {}).get(strip_session_prefix(r_bnum_norm))
                 if lscan_row is not None:
                     r_la = lscan_row["last_action"]
                     r_title = lscan_row["title"]
@@ -603,13 +647,13 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
                     #checks if the bill is recently added. If not then alert new bill
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
-                        logger.info("New bill detected: %s %s", r_state, r_bnum.strip())
+                        logger.info("New bill detected: %s %s", r_state, r_bnum_display.strip())
                         change_kind = "new"
                         new_report_updates += 1
                         new_report = new_report + f"""
                                                     <tr>
                                                         <th>{r_state}</th>
-                                                        <th>{r_bnum.strip()}</th>
+                                                        <th>{r_bnum_display.strip()}</th>
                                                         <th>{r_title}</th>
                                                         <th>{r_btype}</th>
                                                     </tr>
@@ -633,7 +677,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
                     #if not new check change hash to see if the bill has changed. If it has trigger an alert
                     elif lscan_row["change_hash"] != row["Change Hash"]:
-                        logger.info("Bill change found: %s %s", r_state, r_bnum.strip())
+                        logger.info("Bill change found: %s %s", r_state, r_bnum_display.strip())
                         change_kind = "update"
                         content = get_bill_details(bill_id, change_hash, session)
                         if content is None:
@@ -652,7 +696,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                             history_report = history_report + f"""
                             <tr>
                                 <th>{r_state}</th>
-                                <th>{r_bnum.strip()}</th>
+                                <th>{r_bnum_display.strip()}</th>
                                 <th>{history_value.replace(gsheet.at[index, 'History'], "")}</th>
                             </tr>
                             """
@@ -691,7 +735,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                         if not r_link:
                             r_link = bill_details.get("url") or r_link
 
-                    hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum}\")"
+                    hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum_display}\")"
                     queue_update(row_updates, row, 'Number', hyperlink)
                     queue_update(row_updates, row, 'Status', r_la)
                     if last_action_date != None and last_action_date != '':
@@ -727,7 +771,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     worksheet,
                     year,
                     r_state,
-                    r_bnum.strip(),
+                    r_bnum_display.strip(),
                     r_title,
                     r_la,
                     r_btype,

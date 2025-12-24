@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+import re
 from datetime import datetime
 from typing import Iterable, List
 
@@ -48,6 +49,30 @@ class color:
     BOLD = "\033[1m"
     UNDERLINE = "\033[4m"
     END = "\033[0m"
+
+
+def _extract_display_number(value):
+    if not isinstance(value, str):
+        return str(value)
+    value = value.strip()
+    hyperlink_match = re.match(r'=HYPERLINK\(".*?","(.*)"\)', value)
+    if hyperlink_match:
+        return hyperlink_match.group(1)
+    return value
+
+
+def _normalize_bill_number(value: str) -> str:
+    if value is None:
+        return ""
+    display = _extract_display_number(value)
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", str(display)).upper()
+    return cleaned
+
+
+def _strip_session_prefix(normalized_number: str) -> str:
+    if not normalized_number:
+        return ""
+    return re.sub("^X\\d+", "", normalized_number)
 
 
 def create_session():
@@ -113,14 +138,22 @@ def load_ignore_list():
 
 
 def known_bill(bill, existing_frames, ignore_list):
+    bill_number_norm = _normalize_bill_number(bill.get("bill_number"))
+    bill_number_base = _strip_session_prefix(bill_number_norm)
     for df in existing_frames:
         if df.empty:
             continue
+        df_numbers = df.get("Number")
+        normalized_numbers = set()
+        if df_numbers is not None:
+            normalized_numbers = set(
+                _normalize_bill_number(n) for n in df_numbers if isinstance(n, str) or not pd.isna(n)
+            )
         matches = df.loc[
             (df["Bill ID"] == bill["bill_id"])
             | (
                 (df["State"] == abbrev_to_us_state.get(bill["state"], "")) &
-                (df["Number"] == bill["bill_number"]) &
+                (bill_number_norm in normalized_numbers or bill_number_base in normalized_numbers) &
                 (df["Summary"] == bill["title"])
             )
         ]
