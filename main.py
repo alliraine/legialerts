@@ -354,6 +354,7 @@ def get_main_lists(year, session):
                     if attribute != "session":
                         temp_list.append(value)
                 session_df = pd.DataFrame(temp_list)
+                session_df["session_special"] = int(s.get("special", 0) or 0)
 
                 # save to csv
                 session_df.to_csv(s_file)
@@ -373,7 +374,7 @@ def get_main_lists(year, session):
     return all_lists
 
 def build_master_index(all_lists):
-    fields = ["change_hash", "last_action", "last_action_date", "title", "url", "bill_id"]
+    fields = ["change_hash", "last_action", "last_action_date", "title", "url", "bill_id", "session_special", "raw_number"]
     master_index = {}
     for state_name, df in all_lists.items():
         if df.empty:
@@ -390,9 +391,6 @@ def build_master_index(all_lists):
                 entry = {field: row.get(field) for field in fields}
                 entry["raw_number"] = number_raw
                 state_index[number_norm] = entry
-                base_number = strip_session_prefix(number_norm)
-                if base_number != number_norm:
-                    state_index.setdefault(base_number, entry)
         master_index[state_name] = state_index
     return master_index
 
@@ -439,7 +437,10 @@ def normalize_bill_number(value):
 def strip_session_prefix(normalized_number):
     if not normalized_number:
         return ""
-    return re.sub("^X\\d+", "", normalized_number)
+    return re.sub(r"^X\d+", "", normalized_number)
+
+def has_special_prefix(normalized_number):
+    return bool(re.match(r"^X\d+", normalized_number))
 
 def fill_missing(df, value=""):
     df = df.astype(object, copy=False)
@@ -475,6 +476,22 @@ def mark_sheet_formatted(worksheet, year, headers):
     os.makedirs(os.path.dirname(flag_path), exist_ok=True)
     with open(flag_path, "w") as handle:
         handle.write(header_signature)
+
+def find_master_row(state_index, number_norm):
+    if has_special_prefix(number_norm):
+        return state_index.get(number_norm)
+    # prefer non-special exact match
+    candidate = state_index.get(number_norm)
+    if candidate and not candidate.get("session_special"):
+        return candidate
+    base = strip_session_prefix(number_norm)
+    for key, entry in state_index.items():
+        if strip_session_prefix(key) == base and not entry.get("session_special"):
+            return entry
+    for key, entry in state_index.items():
+        if strip_session_prefix(key) == base:
+            return entry
+    return candidate
 
 def get_meaningful_changes(row_updates, prev_row):
     changes = []
@@ -633,7 +650,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             if not state_list.empty:
                 lscan_row = master_index.get(r_state, {}).get(r_bnum_norm)
                 if lscan_row is None:
-                    lscan_row = master_index.get(r_state, {}).get(strip_session_prefix(r_bnum_norm))
+                    lscan_row = find_master_row(master_index.get(r_state, {}), r_bnum_norm)
                 if lscan_row is not None:
                     r_la = lscan_row["last_action"]
                     r_title = lscan_row["title"]
