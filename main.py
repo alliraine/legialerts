@@ -370,6 +370,10 @@ def clean_cell_value(value):
             pass
     return value
 
+def fill_missing(df, value=""):
+    df = df.astype(object, copy=False)
+    return df.where(pd.notna(df), value)
+
 def queue_update(row_updates, row, column, value):
     value = clean_cell_value(value)
     current = row.get(column)
@@ -421,8 +425,8 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
     #loads worksheet into dataframe
     logger.debug("Worksheet headers: %s", expected_headers)
-    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers)).astype(object)
-    gsheet = gsheet.fillna('')
+    gsheet_raw = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers))
+    gsheet = fill_missing(gsheet_raw, "")
 
     #gets previous sheet from file
     if os.path.exists(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv")):
@@ -430,8 +434,8 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"),
             dtype=object,
             keep_default_na=False,
-        ).astype(object)
-        prev_gsheet = prev_gsheet.fillna('')
+        )
+        prev_gsheet = fill_missing(prev_gsheet, "")
     else:
         prev_gsheet = gsheet.copy()
 
@@ -592,7 +596,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                 cell_updates.append((index + 2, col_name, value))
     if missing_states:
         logger.warning("Missing state sessions for: %s", ", ".join(sorted(missing_states)))
-    gsheet = gsheet.fillna('Unknown')
+    gsheet = fill_missing(gsheet, "Unknown")
 
     #updates the entire google sheet from data frame
     if sheet_changed:
@@ -624,8 +628,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
     #does one more pull of the updated sheet then saves it as the previous sheet for next run
     expected_headers = wks.row_values(1)
-    gsheet = pd.DataFrame(wks.get_all_records(expected_headers=expected_headers)).astype(object)
-    gsheet = gsheet.fillna('')
+    gsheet = fill_missing(pd.DataFrame(wks.get_all_records(expected_headers=expected_headers)), "")
     gsheet.to_csv(os.path.join(CACHE_DIR, f"gsheet-{worksheet}-{year}.csv"))
     mark_run_success(worksheet, year)
 
