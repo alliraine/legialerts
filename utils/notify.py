@@ -4,7 +4,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-import tweepy
 from atproto import Client as BSKYClient
 
 from utils.bsky_helper import send_skeet
@@ -21,16 +20,9 @@ def notify_social(msg):
     if not SOCIAL_ENABLED:
         logger.info("Social notifications disabled via SOCIAL_ENABLED")
         return
-    twitter = tweepy.Client(
-        consumer_key=os.environ.get('twitter_consumer_key'),
-        consumer_secret=os.environ.get('twitter_consumer_secret'),
-        access_token=os.environ.get('twitter_access_token'),
-        access_token_secret=os.environ.get('twitter_access_token_secret')
-    )
     bsky = BSKYClient()
     bsky.login(os.environ.get('bsky_user'), os.environ.get('bsky_pass'))
     try:
-        send_tweet(msg, twitter)
         send_skeet(msg, bsky)
     except Exception as e:
         logger.exception("Unable to send social notifications: %s", e)
