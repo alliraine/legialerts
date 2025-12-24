@@ -723,7 +723,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     queue_update(row_updates, row, 'Bill ID', str(bill_id))
                     queue_update(row_updates, row, 'PDF', texts_value)
                 elif row_missing_details(row):
-                    logger.debug("Backfilling missing details for %s %s", r_state, r_bnum.strip())
+                    logger.debug("Backfilling missing details for %s %s", r_state, r_bnum_display.strip())
                     content = get_bill_details(bill_id, change_hash, session)
                     if content is None:
                         continue
@@ -743,7 +743,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     if bill_details is None:
                         bill_details = get_bill_details(bill_id, change_hash, session)
                     if bill_details is None:
-                        logger.error("Bill details unavailable for %s %s", r_state, r_bnum.strip())
+                        logger.error("Bill details unavailable for %s %s", r_state, r_bnum_display.strip())
                         continue
                     if not r_title:
                         r_title = bill_details.get("title") or r_title
