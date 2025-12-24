@@ -3,10 +3,11 @@ import logging
 import os
 import threading
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 
 import main as legi_main
 from utils.config import ALLOW_ANONYMOUS_API
+from utils.change_queue import load_queue, build_rss_feed
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -82,6 +83,14 @@ def health():
     if auth:
         return auth
     return jsonify({"status": "ok"}), 200
+
+
+@app.get("/rss")
+def rss_feed():
+    changes = load_queue()
+    base_url = request.url_root.rstrip("/")
+    feed = build_rss_feed(changes, base_url=base_url)
+    return Response(feed, mimetype="application/rss+xml")
 
 
 @app.get("/stats")

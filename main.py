@@ -6,6 +6,7 @@ import hashlib
 import logging
 import threading
 import math
+import uuid
 
 import pandas as pd
 import time
@@ -28,6 +29,13 @@ from utils.config import (
     get_sheet_key,
     get_tracker_years,
     load_service_account_credentials,
+)
+from utils.change_queue import (
+    append_changes,
+    get_pending_changes,
+    mark_changes_processed,
+    load_queue,
+    write_rss_feed,
 )
 
 from dotenv import load_dotenv
@@ -97,6 +105,20 @@ STATS = {
     "history_updates": 0,
 }
 _stats_lock = threading.Lock()
+
+TRACKED_FIELDS = [
+    "Status",
+    "Date",
+    "Summary",
+    "Sponsors",
+    "Calendar",
+    "History",
+    "URL",
+    "Bill ID",
+    "PDF",
+    "Youth State Risk",
+    "Adult State Risk",
+]
 
 def create_legiscan_session():
     session = create_legiscan_session()
@@ -370,6 +392,16 @@ def clean_cell_value(value):
             pass
     return value
 
+def normalize_for_compare(value):
+    value = clean_cell_value(value)
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return str(value)
+    if value is None:
+        return ""
+    return str(value)
+
 def fill_missing(df, value=""):
     df = df.astype(object, copy=False)
     return df.where(pd.notna(df), value)
@@ -404,6 +436,78 @@ def mark_sheet_formatted(worksheet, year, headers):
     os.makedirs(os.path.dirname(flag_path), exist_ok=True)
     with open(flag_path, "w") as handle:
         handle.write(header_signature)
+
+def get_meaningful_changes(row_updates, prev_row):
+    changes = []
+    for field in TRACKED_FIELDS:
+        if field not in row_updates:
+            continue
+        new_value = normalize_for_compare(row_updates.get(field))
+        old_value = ""
+        if prev_row is not None:
+            old_value = normalize_for_compare(prev_row.get(field))
+        if new_value != old_value:
+            changes.append({
+                "field": field,
+                "old": old_value,
+                "new": new_value,
+            })
+    return changes
+
+def build_change_entry(change_type, worksheet, year, state, bill_number, title, status, url, changed_fields):
+    base_payload = {
+        "change_type": change_type,
+        "worksheet": worksheet,
+        "year": year,
+        "state": state,
+        "bill_number": bill_number,
+        "title": title,
+        "status": status,
+        "url": url,
+        "changed_fields": changed_fields,
+        "created_at": time.time(),
+    }
+    fingerprint = hashlib.sha256(json.dumps(base_payload, sort_keys=True).encode("utf-8")).hexdigest()
+    base_payload["id"] = str(uuid.uuid4())
+    base_payload["fingerprint"] = fingerprint
+    return base_payload
+
+def format_change_message(change):
+    heading = "New bill" if change.get("change_type") == "new" else "Bill update"
+    lines = [
+        f"{heading}: {change.get('state')} {change.get('bill_number')}",
+    ]
+    if change.get("title"):
+        lines.append(f"Title: {change['title']}")
+    if change.get("status"):
+        lines.append(f"Status: {change['status']}")
+    for f in change.get("changed_fields", []):
+        lines.append(f"{f.get('field')}: {f.get('old', '')} -> {f.get('new', '')}")
+    if change.get("url"):
+        lines.append(f"Link: {change['url']}")
+    return "\n".join(lines)
+
+def dispatch_change_queue(base_url=None):
+    pending = get_pending_changes()
+    if not pending:
+        return
+    processed_ids = []
+    for change in pending:
+        msg = format_change_message(change)
+        try:
+            notify_social(msg)
+        except Exception:
+            logger.exception("Unable to send social notification for %s", change.get("id"))
+        try:
+            notify_world("Bill tracker update", msg.replace("\n", "<br>"))
+        except Exception:
+            logger.exception("Unable to send email notification for %s", change.get("id"))
+        processed_ids.append(change.get("id"))
+    mark_changes_processed([cid for cid in processed_ids if cid])
+    try:
+        write_rss_feed(load_queue(), base_url=base_url)
+    except Exception:
+        logger.exception("Unable to refresh RSS feed after dispatch")
 
 def update_worksheet(year, worksheet, new_title, change_title, session, all_lists, rollover = False, rollover_lists = None):
     global world_report, history_report, dev_report, new_report, new_report_updates, history_report_updates, dev_report_updates
@@ -450,12 +554,16 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
     sheet_changed = False
     missing_states = set()
     cell_updates = []
+    queued_changes = []
     for index, row in gsheet.iterrows():
         try:
             row_updates = {}
             r_state = row["State"].strip()
             r_bnum = row["Number"]
             r_btype = row["Bill Type"]
+            change_kind = None
+            prev_row_series = None
+            lscan_row = None
             queue_update(row_updates, row, 'Youth State Risk', f"=VLOOKUP(A{index+2},'Risk Levels'!$A$4:$E$55,2)")
             queue_update(row_updates, row, 'Adult State Risk', f"=VLOOKUP(A{index+2},'Risk Levels'!$A$4:$E$55,3)")
             state_list = all_lists.get(r_state)
@@ -472,14 +580,13 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                     change_hash = lscan_row["change_hash"]
                     last_action_date = lscan_row["last_action_date"]
                     prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
+                    prev_row_series = prev.iloc[0] if not prev.empty else None
                     bill_details = None
 
                     #checks if the bill is recently added. If not then alert new bill
                     if prev.empty or gsheet.at[index, 'Change Hash'] == "":
                         logger.info("New bill detected: %s %s", r_state, r_bnum.strip())
-                        _inc_stat("new_bills")
-                        t = f"{new_title}\n------------------------\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link} "
-                        notify_social(t)
+                        change_kind = "new"
                         new_report_updates += 1
                         new_report = new_report + f"""
                                                     <tr>
@@ -507,11 +614,9 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
 
 
                     #if not new check change hash to see if the bill has changed. If it has trigger an alert
-                    elif lscan_row["change_hash"] != row["Change Hash"] and (lscan_row["last_action"] != row["Status"] or lscan_row["last_action_date"] != row["Date"]):
+                    elif lscan_row["change_hash"] != row["Change Hash"]:
                         logger.info("Bill change found: %s %s", r_state, r_bnum.strip())
-                        _inc_stat("changed_bills")
-                        t = f"{change_title}\n📜Bill: {r_state} {r_bnum.strip()} \n📑Title: {r_title}\n🏷️Bill Type: {r_btype}\n🏛Status: {r_la} \n🔗Bill Text: {r_link}"
-                        notify_social(t)
+                        change_kind = "update"
                         content = get_bill_details(bill_id, change_hash, session)
                         if content is None:
                             continue
@@ -551,6 +656,7 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                         queue_update(row_updates, row, 'History', history_value)
                         queue_update(row_updates, row, 'Bill ID', str(bill_id))
                         queue_update(row_updates, row, 'PDF', texts_value)
+                        change_kind = change_kind or "update"
 
                     if (not r_title) or (not r_la) or (not last_action_date) or (not r_link):
                         if bill_details is None:
@@ -590,6 +696,26 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             dev_report_updates += 1
             dev_report = dev_report + "\n" + str(e.args[0])
         if row_updates:
+            prev_row_data = prev_row_series.to_dict() if prev_row_series is not None else None
+            meaningful_changes = get_meaningful_changes(row_updates, prev_row_data)
+            if lscan_row is not None and meaningful_changes:
+                change_kind_for_entry = change_kind or ("new" if prev_row_data is None else "update")
+                if change_kind_for_entry == "new":
+                    _inc_stat("new_bills")
+                else:
+                    _inc_stat("changed_bills")
+                change_entry = build_change_entry(
+                    change_kind_for_entry,
+                    worksheet,
+                    year,
+                    r_state,
+                    r_bnum.strip(),
+                    r_title,
+                    r_la,
+                    r_link,
+                    meaningful_changes,
+                )
+                queued_changes.append(change_entry)
             gsheet.loc[index, list(row_updates.keys())] = list(row_updates.values())
             sheet_changed = True
             for col_name, value in row_updates.items():
@@ -611,6 +737,13 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
             batch_data.append({"range": cell_ref, "values": [[safe_value]]})
         if batch_data:
             wks.batch_update(batch_data, value_input_option='USER_ENTERED')
+    if queued_changes:
+        added = append_changes(queued_changes)
+        logger.info("Queued %d change(s) for %s %s", added, worksheet, year)
+        try:
+            write_rss_feed(load_queue())
+        except Exception:
+            logger.exception("Unable to refresh RSS feed after queuing changes")
     if digest:
         save_worksheet_digest(worksheet, year, digest)
 
@@ -651,6 +784,7 @@ def main():
         logger.exception("Run failed")
         _set_stat("last_run_status", "error")
         raise
+    dispatch_change_queue()
 
     # if dev_report_updates > 0:
     #     notify_dev_team("Error occured with latest bot run!", dev_report)
