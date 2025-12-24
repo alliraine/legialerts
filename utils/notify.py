@@ -7,7 +7,6 @@ from email.mime.multipart import MIMEMultipart
 from atproto import Client as BSKYClient
 
 from utils.bsky_helper import send_skeet
-from utils.twitter_helper import send_tweet
 from utils.config import SOCIAL_ENABLED
 
 curr_path = os.path.dirname(__file__)
