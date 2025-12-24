@@ -651,23 +651,25 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                 lscan_row = master_index.get(r_state, {}).get(r_bnum_norm)
                 if lscan_row is None:
                     lscan_row = find_master_row(master_index.get(r_state, {}), r_bnum_norm)
-                if lscan_row is not None:
-                    r_la = lscan_row["last_action"]
-                    r_title = lscan_row["title"]
-                    r_link = lscan_row["url"]
-                    bill_id = lscan_row["bill_id"]
-                    change_hash = lscan_row["change_hash"]
-                    last_action_date = lscan_row["last_action_date"]
-                    prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
-                    prev_row_series = prev.iloc[0] if not prev.empty else None
-                    bill_details = None
+                if lscan_row is None:
+                    continue
 
-                    #checks if the bill is recently added. If not then alert new bill
-                    if prev.empty or gsheet.at[index, 'Change Hash'] == "":
-                        logger.info("New bill detected: %s %s", r_state, r_bnum_display.strip())
-                        change_kind = "new"
-                        new_report_updates += 1
-                        new_report = new_report + f"""
+                r_la = lscan_row["last_action"]
+                r_title = lscan_row["title"]
+                r_link = lscan_row["url"]
+                bill_id = lscan_row["bill_id"]
+                change_hash = lscan_row["change_hash"]
+                last_action_date = lscan_row["last_action_date"]
+                prev = prev_gsheet.loc[(prev_gsheet["State"] == row["State"]) & (prev_gsheet["Number"] == row["Number"])]
+                prev_row_series = prev.iloc[0] if not prev.empty else None
+                bill_details = None
+
+                #checks if the bill is recently added. If not then alert new bill
+                if prev.empty or gsheet.at[index, 'Change Hash'] == "":
+                    logger.info("New bill detected: %s %s", r_state, r_bnum_display.strip())
+                    change_kind = "new"
+                    new_report_updates += 1
+                    new_report = new_report + f"""
                                                     <tr>
                                                         <th>{r_state}</th>
                                                         <th>{r_bnum_display.strip()}</th>
@@ -676,99 +678,95 @@ def update_worksheet(year, worksheet, new_title, change_title, session, all_list
                                                     </tr>
                                                     """
 
-                        content = get_bill_details(bill_id, change_hash, session)
-                        if content is None:
-                            continue
-                        bill_details = content
+                    content = get_bill_details(bill_id, change_hash, session)
+                    if content is None:
+                        continue
+                    bill_details = content
 
-                        sponsors_value = get_sponsors(content["sponsors"])
-                        calendar_value = get_calendar(content["calendar"])
-                        history_value = get_history(content["history"])
-                        texts_value = get_texts(content["texts"])
-                        queue_update(row_updates, row, 'Sponsors', sponsors_value)
-                        queue_update(row_updates, row, 'Calendar', calendar_value)
-                        queue_update(row_updates, row, 'History', history_value)
-                        queue_update(row_updates, row, 'Bill ID', str(bill_id))
-                        queue_update(row_updates, row, 'PDF', texts_value)
+                    sponsors_value = get_sponsors(content["sponsors"])
+                    calendar_value = get_calendar(content["calendar"])
+                    history_value = get_history(content["history"])
+                    texts_value = get_texts(content["texts"])
+                    queue_update(row_updates, row, 'Sponsors', sponsors_value)
+                    queue_update(row_updates, row, 'Calendar', calendar_value)
+                    queue_update(row_updates, row, 'History', history_value)
+                    queue_update(row_updates, row, 'Bill ID', str(bill_id))
+                    queue_update(row_updates, row, 'PDF', texts_value)
 
 
-                    #if not new check change hash to see if the bill has changed. If it has trigger an alert
-                    elif lscan_row["change_hash"] != row["Change Hash"]:
-                        logger.info("Bill change found: %s %s", r_state, r_bnum_display.strip())
-                        change_kind = "update"
-                        content = get_bill_details(bill_id, change_hash, session)
-                        if content is None:
-                            continue
-                        bill_details = content
+                #if not new check change hash to see if the bill has changed. If it has trigger an alert
+                elif lscan_row["change_hash"] != row["Change Hash"]:
+                    logger.info("Bill change found: %s %s", r_state, r_bnum_display.strip())
+                    change_kind = "update"
+                    content = get_bill_details(bill_id, change_hash, session)
+                    if content is None:
+                        continue
+                    bill_details = content
 
-                        sponsors_value = get_sponsors(content["sponsors"])
-                        calendar_value = get_calendar(content["calendar"])
-                        history_value = get_history(content["history"])
-                        texts_value = get_texts(content["texts"])
-                        queue_update(row_updates, row, 'Sponsors', sponsors_value)
-                        queue_update(row_updates, row, 'Calendar', calendar_value)
-                        if history_value != gsheet.at[index, 'History']:
-                            history_report_updates += 1
-                            _inc_stat("history_updates")
-                            history_report = history_report + f"""
+                    sponsors_value = get_sponsors(content["sponsors"])
+                    calendar_value = get_calendar(content["calendar"])
+                    history_value = get_history(content["history"])
+                    texts_value = get_texts(content["texts"])
+                    queue_update(row_updates, row, 'Sponsors', sponsors_value)
+                    queue_update(row_updates, row, 'Calendar', calendar_value)
+                    if history_value != gsheet.at[index, 'History']:
+                        history_report_updates += 1
+                        _inc_stat("history_updates")
+                        history_report = history_report + f"""
                             <tr>
                                 <th>{r_state}</th>
                                 <th>{r_bnum_display.strip()}</th>
                                 <th>{history_value.replace(gsheet.at[index, 'History'], "")}</th>
                             </tr>
                             """
-                        queue_update(row_updates, row, 'History', history_value)
-                        queue_update(row_updates, row, 'Bill ID', str(bill_id))
-                        queue_update(row_updates, row, 'PDF', texts_value)
-                    elif row_missing_details(row):
-                        logger.debug("Backfilling missing details for %s %s", r_state, r_bnum.strip())
-                        content = get_bill_details(bill_id, change_hash, session)
-                        if content is None:
-                            continue
-                        bill_details = content
-                        sponsors_value = get_sponsors(content["sponsors"])
-                        calendar_value = get_calendar(content["calendar"])
-                        history_value = get_history(content["history"])
-                        texts_value = get_texts(content["texts"])
-                        queue_update(row_updates, row, 'Sponsors', sponsors_value)
-                        queue_update(row_updates, row, 'Calendar', calendar_value)
-                        queue_update(row_updates, row, 'History', history_value)
-                        queue_update(row_updates, row, 'Bill ID', str(bill_id))
-                        queue_update(row_updates, row, 'PDF', texts_value)
-                        change_kind = change_kind or "update"
+                    queue_update(row_updates, row, 'History', history_value)
+                    queue_update(row_updates, row, 'Bill ID', str(bill_id))
+                    queue_update(row_updates, row, 'PDF', texts_value)
+                elif row_missing_details(row):
+                    logger.debug("Backfilling missing details for %s %s", r_state, r_bnum.strip())
+                    content = get_bill_details(bill_id, change_hash, session)
+                    if content is None:
+                        continue
+                    bill_details = content
+                    sponsors_value = get_sponsors(content["sponsors"])
+                    calendar_value = get_calendar(content["calendar"])
+                    history_value = get_history(content["history"])
+                    texts_value = get_texts(content["texts"])
+                    queue_update(row_updates, row, 'Sponsors', sponsors_value)
+                    queue_update(row_updates, row, 'Calendar', calendar_value)
+                    queue_update(row_updates, row, 'History', history_value)
+                    queue_update(row_updates, row, 'Bill ID', str(bill_id))
+                    queue_update(row_updates, row, 'PDF', texts_value)
+                    change_kind = change_kind or "update"
 
-                    if (not r_title) or (not r_la) or (not last_action_date) or (not r_link):
-                        if bill_details is None:
-                            bill_details = get_bill_details(bill_id, change_hash, session)
-                        if bill_details is None:
-                            logger.error("Bill details unavailable for %s %s", r_state, r_bnum.strip())
-                            continue
-                        if not r_title:
-                            r_title = bill_details.get("title") or r_title
-                        if not r_la:
-                            r_la = bill_details.get("last_action") or r_la
-                        if not last_action_date:
-                            last_action_date = bill_details.get("last_action_date") or bill_details.get("status_date")
-                        if not r_link:
-                            r_link = bill_details.get("url") or r_link
+                if (not r_title) or (not r_la) or (not last_action_date) or (not r_link):
+                    if bill_details is None:
+                        bill_details = get_bill_details(bill_id, change_hash, session)
+                    if bill_details is None:
+                        logger.error("Bill details unavailable for %s %s", r_state, r_bnum.strip())
+                        continue
+                    if not r_title:
+                        r_title = bill_details.get("title") or r_title
+                    if not r_la:
+                        r_la = bill_details.get("last_action") or r_la
+                    if not last_action_date:
+                        last_action_date = bill_details.get("last_action_date") or bill_details.get("status_date")
+                    if not r_link:
+                        r_link = bill_details.get("url") or r_link
 
-                    hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum_display}\")"
-                    queue_update(row_updates, row, 'Number', hyperlink)
-                    queue_update(row_updates, row, 'Status', r_la)
-                    if last_action_date != None and last_action_date != '':
-                        queue_update(row_updates, row, 'Date', last_action_date)
-                    else:
-                        queue_update(row_updates, row, 'Date', "Unknown")
-                    queue_update(row_updates, row, 'Summary', r_title)
-                    queue_update(row_updates, row, 'Change Hash', lscan_row["change_hash"])
-                    if r_link:
-                        queue_update(row_updates, row, 'URL', f"=HYPERLINK(\"{r_link}\",\"{r_link}\")")
-                    else:
-                        queue_update(row_updates, row, 'URL', "Unknown")
+                hyperlink = f"=HYPERLINK(\"{r_link}\",\"{r_bnum_display}\")"
+                queue_update(row_updates, row, 'Number', hyperlink)
+                queue_update(row_updates, row, 'Status', r_la)
+                if last_action_date != None and last_action_date != '':
+                    queue_update(row_updates, row, 'Date', last_action_date)
                 else:
                     queue_update(row_updates, row, 'Date', "Unknown")
-            else:
-                queue_update(row_updates, row, 'Date', "Unknown")
+                queue_update(row_updates, row, 'Summary', r_title)
+                queue_update(row_updates, row, 'Change Hash', lscan_row["change_hash"])
+                if r_link:
+                    queue_update(row_updates, row, 'URL', f"=HYPERLINK(\"{r_link}\",\"{r_link}\")")
+                else:
+                    queue_update(row_updates, row, 'URL', "Unknown")
 
         except Exception as e:
             logger.exception("Row processing error: %s", e)
