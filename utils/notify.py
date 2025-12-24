@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from atproto import Client as BSKYClient
 
 from utils.bsky_helper import send_skeet
-from utils.config import SOCIAL_ENABLED
+from utils.config import SOCIAL_ENABLED, EMAIL_ENABLED
 
 curr_path = os.path.dirname(__file__)
 logger = logging.getLogger(__name__)
@@ -39,6 +39,9 @@ def notify_world(subject, content):
     send_email(to, subject, content)
 
 def send_email(to, subject, content):
+    if not EMAIL_ENABLED:
+        logger.info("Email notifications disabled via EMAIL_ENABLED")
+        return
     msg = MIMEMultipart('alternative')
 
     # Record the MIME types of both parts - text/plain and text/html.

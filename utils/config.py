@@ -23,6 +23,7 @@ LEGISCAN_MIN_INTERVAL = float(os.environ.get("LEGISCAN_MIN_INTERVAL", "0"))
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 SEARCH_CACHE_TTL = int(os.environ.get("SEARCH_CACHE_TTL", "3600"))
 SOCIAL_ENABLED = _as_bool(os.environ.get("SOCIAL_ENABLED"), default=True)
+EMAIL_ENABLED = _as_bool(os.environ.get("EMAIL_ENABLED"), default=False)
 ALLOW_ANONYMOUS_API = _as_bool(os.environ.get("API_ALLOW_ANONYMOUS"), default=False)
 
 
