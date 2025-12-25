@@ -36,6 +36,26 @@ def _auth_required(allow_health=False):
     return jsonify({"status": "unauthorized"}), 401
 
 
+def _normalize_key(key: str) -> str:
+    return str(key).replace(" ", "_")
+
+
+def _flatten(obj, prefix="", acc=None):
+    if acc is None:
+        acc = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            new_prefix = f"{prefix}.{_normalize_key(k)}" if prefix else _normalize_key(k)
+            _flatten(v, new_prefix, acc)
+    elif isinstance(obj, list):
+        for idx, v in enumerate(obj):
+            new_prefix = f"{prefix}.{idx}" if prefix else str(idx)
+            _flatten(v, new_prefix, acc)
+    else:
+        acc[prefix] = obj
+    return acc
+
+
 def _sheet_stats(path):
     stats = {
         "total_rows": 0,
@@ -60,6 +80,22 @@ def _sheet_stats(path):
             if not url or url.lower() == "unknown":
                 stats["missing_url"] += 1
     return stats
+
+
+def _build_stats():
+    results = {
+        "run": legi_main.get_stats(),
+        "worksheets": {},
+    }
+    years = getattr(legi_main, "years", [])
+    for year in years:
+        year_stats = {}
+        for worksheet in WORKSHEETS:
+            cache_dir = getattr(legi_main, "CACHE_DIR", os.path.join(legi_main.curr_path, "cache"))
+            cache_path = os.path.join(cache_dir, f"gsheet-{worksheet}-{year}.csv")
+            year_stats[worksheet] = _sheet_stats(cache_path)
+        results["worksheets"][str(year)] = year_stats
+    return results
 
 
 @app.get("/run")
@@ -98,16 +134,14 @@ def stats():
     auth = _auth_required()
     if auth:
         return auth
-    results = {
-        "run": legi_main.get_stats(),
-        "worksheets": {},
-    }
-    years = getattr(legi_main, "years", [])
-    for year in years:
-        year_stats = {}
-        for worksheet in WORKSHEETS:
-            cache_dir = getattr(legi_main, "CACHE_DIR", os.path.join(legi_main.curr_path, "cache"))
-            cache_path = os.path.join(cache_dir, f"gsheet-{worksheet}-{year}.csv")
-            year_stats[worksheet] = _sheet_stats(cache_path)
-        results["worksheets"][str(year)] = year_stats
-    return jsonify(results), 200
+    return jsonify(_build_stats()), 200
+
+
+@app.get("/stats/flat")
+def stats_flat():
+    auth = _auth_required()
+    if auth:
+        return auth
+    nested = _build_stats()
+    flat = _flatten(nested)
+    return jsonify(flat), 200
