@@ -7,13 +7,16 @@ on:
 
 jobs:
   trigger:
-    if: ${{ secrets.LEGIALERTS_RUN_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Call LegiAlerts runner
         env:
           LEGIALERTS_RUN_TOKEN: ${{ secrets.LEGIALERTS_RUN_TOKEN }}
         run: |
+          if [ -z "$LEGIALERTS_RUN_TOKEN" ]; then
+            echo "LEGIALERTS_RUN_TOKEN not configured; skipping run."
+            exit 0
+          fi
           curl -sSf \
             -H "Authorization: Bearer ${LEGIALERTS_RUN_TOKEN}" \
             https://app.legialerts.org/run
