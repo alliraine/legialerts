@@ -609,6 +609,7 @@ def get_meaningful_changes(row_updates, prev_row):
     return changes
 
 def build_change_entry(change_type, worksheet, year, state, bill_number, title, status, bill_type, url, changed_fields):
+    created_at = time.time()
     base_payload = {
         "change_type": change_type,
         "worksheet": worksheet,
@@ -620,9 +621,10 @@ def build_change_entry(change_type, worksheet, year, state, bill_number, title, 
         "bill_type": bill_type,
         "url": url,
         "changed_fields": changed_fields,
-        "created_at": time.time(),
+        "created_at": created_at,
     }
-    fingerprint = hashlib.sha256(json.dumps(base_payload, sort_keys=True).encode("utf-8")).hexdigest()
+    fingerprint_basis = {k: v for k, v in base_payload.items() if k != "created_at"}
+    fingerprint = hashlib.sha256(json.dumps(fingerprint_basis, sort_keys=True).encode("utf-8")).hexdigest()
     base_payload["id"] = str(uuid.uuid4())
     base_payload["fingerprint"] = fingerprint
     return base_payload
