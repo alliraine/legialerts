@@ -2,6 +2,7 @@ import csv
 import logging
 import os
 import threading
+import time
 
 from flask import Flask, jsonify, request, Response
 
@@ -13,6 +14,7 @@ app = Flask(__name__)
 logger = logging.getLogger(__name__)
 _run_lock = threading.Lock()
 AUTH_TOKEN = os.environ.get("API_AUTH_TOKEN")
+APP_START_TIME = time.time()
 WORKSHEETS = [
     "Anti-LGBTQ Bills",
     "Pro-LGBTQ Bills",
@@ -118,7 +120,20 @@ def health():
     auth = _auth_required(allow_health=True)
     if auth:
         return auth
-    return jsonify({"status": "ok"}), 200
+    stats = legi_main.get_stats()
+    last_status = stats.get("last_run_status")
+    last_started = stats.get("last_run_started")
+    now = time.time()
+    healthy = (
+        last_status in ("ok", "running")
+        and last_started is not None
+        and (now - float(last_started)) <= 30 * 60
+    )
+    if not healthy and (now - APP_START_TIME) <= 30 * 60:
+        healthy = True
+    if healthy:
+        return jsonify({"status": "ok"}), 200
+    return jsonify({"status": "failing"}), 503
 
 
 @app.get("/rss")
