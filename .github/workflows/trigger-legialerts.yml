@@ -1,0 +1,19 @@
+name: Trigger LegiAlerts Run
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    if: ${{ secrets.LEGIALERTS_RUN_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call LegiAlerts runner
+        env:
+          LEGIALERTS_RUN_TOKEN: ${{ secrets.LEGIALERTS_RUN_TOKEN }}
+        run: |
+          curl -sSf \
+            -H "Authorization: Bearer ${LEGIALERTS_RUN_TOKEN}" \
+            https://app.legialerts.org/run
