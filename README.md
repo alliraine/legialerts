@@ -1,3 +1,4 @@
+[![.github/workflows/trigger-legialerts.yml](https://github.com/alliraine/legialerts/actions/workflows/trigger-legialerts.yml/badge.svg)](https://github.com/alliraine/legialerts/actions/workflows/trigger-legialerts.yml)
 # LegiAlerts
 A Twitter/Bsky bot and automation platform for tracking anti-LGBTQ legislation. The bot updates the tracker at https://legialerts.org and posts alerts when new bills appear or when statuses change.
 
