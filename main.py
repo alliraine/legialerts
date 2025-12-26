@@ -120,6 +120,14 @@ TRACKED_FIELDS = [
     "PDF",
 ]
 
+ORDINAL_WORDS = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+}
+
 def create_legiscan_session():
     session = create_legiscan_session()
     retry = Retry(
@@ -299,6 +307,41 @@ def save_worksheet_digest(worksheet, year, digest):
     with open(digest_path, "w") as handle:
         handle.write(digest)
 
+def parse_special_session_number(session_row):
+    """
+    Extract the special session number (1st, 2nd, etc.) from a session row.
+    Falls back to the boolean-ish 'special' flag if an ordinal can't be parsed.
+    """
+    raw_flag = session_row.get("special")
+    try:
+        if int(raw_flag or 0) == 0:
+            return 0
+    except Exception:
+        pass
+    text_fields = [
+        session_row.get("session_tag"),
+        session_row.get("session_title"),
+        session_row.get("session_name"),
+        session_row.get("name"),
+    ]
+    for field in text_fields:
+        if not isinstance(field, str):
+            continue
+        match = re.search(r"(\d+)(?:st|nd|rd|th)?\s+Special Session", field, re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                pass
+        lower = field.lower()
+        for word, number in ORDINAL_WORDS.items():
+            if f"{word} special session" in lower:
+                return number
+    try:
+        return int(raw_flag or 0)
+    except Exception:
+        return 0
+
 def get_main_lists(year, session):
     session_list_file = os.path.join(CACHE_DIR, "sessions.csv")
 
@@ -328,6 +371,7 @@ def get_main_lists(year, session):
             continue
         s_id = int(s_id)
         state_id = int(state_id)
+        special_number = parse_special_session_number(s)
         s_name = STATES[state_id - 1]
         s_year = str(s.get("year_start"))
         s_files = [os.path.join(CACHE_DIR, f"{s_name}-{s_year}-session-{s_id}.csv")]
@@ -354,13 +398,18 @@ def get_main_lists(year, session):
                     if attribute != "session":
                         temp_list.append(value)
                 session_df = pd.DataFrame(temp_list)
-                session_df["session_special"] = int(s.get("special", 0) or 0)
+                session_df["session_special"] = special_number
+                session_df["session_id"] = s_id
 
                 # save to csv
                 session_df.to_csv(s_file)
             else:
                 logger.info("Loading master list from cache: %s", s_file)
                 session_df = pd.read_csv(s_file)
+                if "session_special" not in session_df.columns:
+                    session_df["session_special"] = special_number
+                if "session_id" not in session_df.columns:
+                    session_df["session_id"] = s_id
 
             existing = all_lists.get(s_name, pd.DataFrame())
             if existing.empty:
@@ -374,7 +423,7 @@ def get_main_lists(year, session):
     return all_lists
 
 def build_master_index(all_lists):
-    fields = ["change_hash", "last_action", "last_action_date", "title", "url", "bill_id", "session_special", "raw_number"]
+    fields = ["change_hash", "last_action", "last_action_date", "title", "url", "bill_id", "session_special", "raw_number", "session_id"]
     master_index = {}
     for state_name, df in all_lists.items():
         if df.empty:
@@ -384,13 +433,42 @@ def build_master_index(all_lists):
             master_index[state_name] = {}
             continue
         state_index = {}
+        def _store_entry(key, entry, prefer_non_special=True):
+            if not key:
+                return
+            existing = state_index.get(key)
+            new_special = entry.get("session_special") or 0
+            if existing is None:
+                state_index[key] = entry
+                return
+            existing_special = existing.get("session_special") or 0
+            if prefer_non_special:
+                if existing_special and not new_special:
+                    state_index[key] = entry
+                    return
+                if not existing_special and new_special:
+                    return
+            state_index[key] = entry
         for _, row in df.iterrows():
             number_raw = str(row.get("number", "")).strip()
             number_norm = normalize_bill_number(number_raw)
             if number_norm:
-                entry = {field: row.get(field) for field in fields}
+                entry = {field: row.get(field) for field in fields if field in row}
                 entry["raw_number"] = number_raw
-                state_index[number_norm] = entry
+                try:
+                    entry["session_special"] = int(entry.get("session_special") or 0)
+                except Exception:
+                    entry["session_special"] = 0
+                entry["session_id"] = row.get("session_id")
+                base_key = strip_session_prefix(number_norm) or number_norm
+                _store_entry(number_norm, entry, prefer_non_special=True)
+                if base_key != number_norm:
+                    _store_entry(base_key, entry, prefer_non_special=True)
+                else:
+                    _store_entry(base_key, entry, prefer_non_special=True)
+                if entry["session_special"] and base_key:
+                    special_key = f"X{entry['session_special']}{base_key}"
+                    _store_entry(special_key, entry, prefer_non_special=False)
         master_index[state_name] = state_index
     return master_index
 
@@ -442,6 +520,15 @@ def strip_session_prefix(normalized_number):
 def has_special_prefix(normalized_number):
     return bool(re.match(r"^X\d+", normalized_number))
 
+def special_prefix_number(normalized_number):
+    match = re.match(r"^X(\d+)", normalized_number)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
 def fill_missing(df, value=""):
     df = df.astype(object, copy=False)
     return df.where(pd.notna(df), value)
@@ -478,13 +565,24 @@ def mark_sheet_formatted(worksheet, year, headers):
         handle.write(header_signature)
 
 def find_master_row(state_index, number_norm):
-    if has_special_prefix(number_norm):
-        return state_index.get(number_norm)
-    # prefer non-special exact match
-    candidate = state_index.get(number_norm)
+    if not state_index:
+        return None
+    direct = state_index.get(number_norm)
+    if direct:
+        return direct
+    base = strip_session_prefix(number_norm)
+    special_number = special_prefix_number(number_norm)
+    if special_number is not None:
+        special_key = f"X{special_number}{base}"
+        special_candidate = state_index.get(special_key)
+        if special_candidate:
+            return special_candidate
+        for key, entry in state_index.items():
+            if strip_session_prefix(key) == base and int(entry.get("session_special") or 0) == special_number:
+                return entry
+    candidate = state_index.get(base)
     if candidate and not candidate.get("session_special"):
         return candidate
-    base = strip_session_prefix(number_norm)
     for key, entry in state_index.items():
         if strip_session_prefix(key) == base and not entry.get("session_special"):
             return entry
