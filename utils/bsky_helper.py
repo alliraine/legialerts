@@ -1,7 +1,54 @@
+import logging
+import os
 import re
+import time
 from textwrap import wrap
 
 from atproto_client import models
+
+from utils.config import CACHE_DIR
+
+logger = logging.getLogger(__name__)
+
+BSKY_POST_MIN_INTERVAL = float(os.environ.get("BSKY_POST_MIN_INTERVAL", "60"))
+_last_bsky_post_ts = None
+_bsky_marker_path = os.path.join(CACHE_DIR, "bsky-last-post.txt")
+
+
+def _load_last_post_time():
+    global _last_bsky_post_ts
+    if _last_bsky_post_ts is not None:
+        return _last_bsky_post_ts
+    try:
+        with open(_bsky_marker_path, "r") as handle:
+            _last_bsky_post_ts = float(handle.read().strip())
+            return _last_bsky_post_ts
+    except Exception:
+        return None
+
+
+def _save_last_post_time(ts):
+    global _last_bsky_post_ts
+    _last_bsky_post_ts = ts
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(_bsky_marker_path, "w") as handle:
+            handle.write(str(ts))
+    except Exception:
+        logger.debug("Unable to persist Bluesky throttle marker", exc_info=True)
+
+
+def throttle_before_post():
+    if BSKY_POST_MIN_INTERVAL <= 0:
+        return
+    last = _load_last_post_time()
+    now = time.time()
+    if last is not None:
+        wait = (last + BSKY_POST_MIN_INTERVAL) - now
+        if wait > 0:
+            logger.info("Throttling Bluesky post for %.2fs to respect rate limits", wait)
+            time.sleep(wait)
+    _save_last_post_time(time.time())
 
 def parse_links(text):
     facets = []
@@ -41,11 +88,13 @@ def send_skeet(text, bsky):
             facets = parse_links(l)
             if response is not None:
                 print(l)
+                throttle_before_post()
                 parent = models.create_strong_ref(response)
                 root = models.create_strong_ref(response)
                 response = bsky.send_post(text=l, reply_to=models.AppBskyFeedPost.ReplyRef(parent=parent, root=root), facets=facets)
             else:
                 print(l)
+                throttle_before_post()
                 response = bsky.send_post(text=l, facets=facets)
     except Exception as e:
         print("error sending skeet", e)
